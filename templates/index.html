@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Holiday Hub - Your AI Travel Concierge</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=9.3.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p id="loading-text">Please wait...</p>
+    </div>
+
+    <aside id="desktop-sidebar">
+        <div class="logo-container">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo">
+        </div>
+        <nav> 
+            <button id="desktop-tab-main" class="desktop-nav-button active" data-page="main-container">
+                <i class="fas fa-magic"></i><span>Plan</span>
+            </button>
+            <button id="desktop-tab-my-plan" class="desktop-nav-button" data-page="my-plan-container" disabled>
+                <i class="fas fa-map-marked-alt"></i><span>My Plans</span>
+            </button>
+            <button id="desktop-tab-settings" class="desktop-nav-button" data-page="settings-container-desktop">
+                <i class="fas fa-cog"></i><span>Settings</span>
+            </button>
+        </nav>
+        <div id="settings-container-desktop">
+            <div id="auth-section-desktop"></div>
+        </div>
+    </aside>
+
+    <div id="app-wrapper">
+        
+        <div id="main-container" class="page-container active mode-initial">
+            
+            <div id="chat-container" class="app-phase active">
+                <div class="chat-header">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Holiday Hub" class="logo">
+                    <h2>Your AI Travel Concierge</h2>
+                </div>
+                <div id="chat-messages"></div>
+                
+                <div id="chat-input-area">
+                    <div id="autocomplete-results"></div> 
+                    <input type="text" id="chat-text-input" placeholder="e.g., Tokyo, Japan" class="chat-input-field" autocomplete="off">
+                    <button id="chat-text-send" class="chat-send-button"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+
+            <div id="map-container" class="app-phase">
+                <div class="map-header">
+                    <h3>Where to stay?</h3>
+                    <button id="back-to-chat-btn" class="back-button-map">< Back</button>
+                </div>
+                <div id="hotel-map"></div>
+                <div id="hotel-detail-panel" class="hidden">
+                    <div id="panel-content"></div>
+                </div>
+            </div>
+
+            <div id="result-container" class="app-phase">
+                <div id="map-panel"></div> 
+                <div id="itinerary-panel">
+                    <div id="itinerary-header">
+                        <h2>Your Itinerary</h2>
+                        <div id="day-buttons-container"></div>
+                        <div class="plan-actions hidden">
+                            <button id="save-plan-button"><i class="fas fa-save"></i> Save</button>
+                            <button id="share-plan-button"><i class="fas fa-share-alt"></i> Share</button>
+                        </div>
+                    </div>
+                    <div id="itinerary-content"></div>
+                    <button id="back-button">Create a New Plan</button>
+                </div>
+            </div>
+            
+        </div> <div id="my-plan-container" class="page-container">
+            <div class="page-header"><h2>My Saved Plans</h2></div>
+            <div id="saved-plans-list" class="page-content"></div>
+        </div>
+
+        <div id="settings-container" class="page-container">
+            <div class="page-header"><h2>Settings</h2></div>
+            <div id="auth-section" class="page-content"></div>
+        </div>
+
+    </div> <nav id="tab-bar">
+        <button id="tab-main" class="tab-button active" data-page="main-container"><i class="fas fa-magic"></i><span>Plan</span></button>
+        <button id="tab-my-plan" class="tab-button" data-page="my-plan-container"><i class="fas fa-map-marked-alt"></i><span>My Plans</span></button>
+        <button id="tab-settings" class="tab-button" data-page="settings-container"><i class="fas fa-cog"></i><span>Settings</span></button>
+    </nav>
+
+    <template id="activity-card-template">
+        <div class="activity-card-wrapper">
+            <div class="travel-details">
+                <span class="travel-mode not-available" data-mode="driving"><i class="fas fa-car"></i> -- min</span>
+                <span class="travel-mode not-available" data-mode="transit"><i class="fas fa-bus"></i> -- min</span>
+                <span class="travel-mode not-available" data-mode="walking"><i class="fas fa-person-walking"></i> -- min</span>
+            </div>
+            <div class="activity-card">
+                <div class="card-header">
+                    <span class="drag-handle">⋮⋮</span>
+                    <span class="time-block"></span>
+                    <div>
+                        <button class="plan-b-btn">🔄</button>
+                        <button class="delete-btn">×</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <img class="card-image-small" src="" alt="Activity" loading="lazy">
+                    <div class="card-text">
+                        <h4 class="card-title"></h4>
+                        <p class="card-rating"></p>
+                        <div class="card-tags"></div> 
+                        <a href="#" class="map-link" target="_blank">View on Google Maps</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <script>
+        window.FB_DB = null; window.FB_AUTH = null;
+        window.startHolidayHubApp = function() {
+            if (window.googleMapsApiReady && window.firebaseAuthReady && window.scriptJsReady && !window.appInitialized) {
+                console.log("✅ [STARTUP] Initializing...");
+                window.appInitialized = true; 
+                if (typeof window.initializeAppLogic === 'function') {
+                    window.initializeAppLogic( window.FB_DB, window.FB_AUTH, window.FB_CURRENT_USER_ID, window.FB_APP_ID );
+                }
+            }
+        }
+    </script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        const firebaseConfig = {
+            apiKey: "AIzaSyBL9wToi01ZSYLHrI5D-5WxGWHVLxqrDGc",
+            authDomain: "holiday-hub-220c0.firebaseapp.com",
+            projectId: "holiday-hub-220c0",
+            storageBucket: "holiday-hub-220c0.firebasestorage.app",
+            messagingSenderId: "392738002751",
+            appId: "1:392738002751:web:a1e7cec44183f72470a58a",
+            measurementId: "G-ETL3NVNBDJ"
+        };
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.FB_DB = getFirestore(app);
+            window.FB_AUTH = getAuth(app);
+            window.FB_APP_ID = firebaseConfig.appId;
+            onAuthStateChanged(window.FB_AUTH, (user) => {
+                document.getElementById('loading-overlay').classList.add('hidden');
+                window.FB_CURRENT_USER_ID = user ? user.uid : null;
+                if (!window.firebaseAuthReady) {
+                    window.firebaseAuthReady = true; window.startHolidayHubApp();
+                }
+                if (window.appInitialized && window.HolidayHubApp) window.HolidayHubApp.updateUser(window.FB_CURRENT_USER_ID);
+            });
+        } catch (e) { console.error(e); }
+    </script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=9.3.0"></script>
+    <script>
+        function triggerAppInit() { window.googleMapsApiReady = true; window.startHolidayHubApp(); }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ google_api_key }}&libraries=routes,marker&callback=triggerAppInit&loading=async&defer" async defer></script>
+</body>
+</html>

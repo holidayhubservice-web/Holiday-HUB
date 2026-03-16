@@ -1,0 +1,259 @@
+/* --- 0. 변수 및 리셋 (v9.2.2 유지) --- */
+:root {
+    --primary-color: #00897b;
+    --primary-light: #e0f2f1;
+    --primary-dark: #00695c;
+    --accent-color: #ff8f00;
+    --text-main: #2d3436;
+    --text-sub: #636e72;
+    --bg-app: #f0f2f5; 
+    --bg-white: #ffffff;
+    --bg-chat-user: #00897b;
+    --text-chat-user: #ffffff;
+    
+    --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 10px 25px rgba(0,0,0,0.12);
+    --shadow-xl: 0 20px 50px rgba(0,0,0,0.15); /* [New] 초기 상태용 깊은 그림자 */
+    
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    
+    /* [New] 애니메이션 변수 */
+    --transition-speed: 0.8s;
+    --transition-curve: cubic-bezier(0.19, 1, 0.22, 1); /* 매우 부드러운 감속 곡선 */
+}
+
+* { box-sizing: border-box; }
+
+body, html {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background-color: var(--bg-app);
+    color: var(--text-main);
+}
+img { max-width: 100%; height: auto; display: block; }
+
+/* --- 1. 로딩 오버레이 (유지) --- */
+#loading-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(8px);
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    z-index: 99999; transition: opacity 0.3s;
+}
+#loading-overlay.hidden { opacity: 0; pointer-events: none; }
+#loading-overlay .spinner {
+    width: 50px; height: 50px; border: 4px solid var(--primary-light);
+    border-top-color: var(--primary-color); border-radius: 50%; 
+    animation: spin 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading-text { margin-top: 20px; font-weight: 600; color: var(--primary-dark); }
+
+/* --- 2. 모바일 레이아웃 (기존 유지) --- */
+#app-wrapper { width: 100%; height: calc(100% - 60px); position: relative; overflow: hidden; background-color: var(--bg-white); }
+.page-container { width: 100%; height: 100%; display: none; flex-direction: column; background-color: var(--bg-app); }
+.page-container.active { display: flex; }
+.page-header { padding: 15px 20px; background: var(--bg-white); border-bottom: 1px solid #eef0f2; flex-shrink: 0; }
+.page-header h2 { margin: 0; font-size: 1.3rem; font-weight: 800; color: var(--text-main); }
+.page-content { padding: 20px; flex-grow: 1; overflow-y: auto; }
+
+#tab-bar {
+    position: fixed; bottom: 0; left: 0; width: 100%; height: 60px;
+    background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px);
+    border-top: 1px solid #eef0f2; display: flex; justify-content: space-around; align-items: center;
+    z-index: 5000; padding-bottom: env(safe-area-inset-bottom);
+}
+.tab-button {
+    background: none; border: none; color: #95a5a6;
+    display: flex; flex-direction: column; align-items: center; font-size: 10px; gap: 4px; width: 100%; cursor: pointer;
+}
+.tab-button i { font-size: 22px; }
+.tab-button.active { color: var(--primary-color); }
+
+/* --- 3. 공통 컴포넌트 스타일 (채팅, 카드 등 - 기존 유지 및 다듬기) --- */
+#chat-container {
+    background-color: var(--bg-white);
+    /* [v9.3.1 핵심 수정] 내부 요소들을 세로로 정렬하고 꽉 채우기 */
+    display: flex;             /* Flexbox 선언 */
+    flex-direction: column;    /* 세로 방향 정렬 */
+    height: 100%;              /* 부모 높이만큼 꽉 채움 */
+    overflow: hidden;          /* 둥근 모서리 밖으로 내용이 튀어나가는 것 방지 */
+}
+.chat-header .logo { height: 32px; width: auto; transition: all var(--transition-speed) var(--transition-curve); } 
+.chat-header h2 { font-size: 1.1rem; font-weight: 700; margin: 0; transition: font-size var(--transition-speed) var(--transition-curve); }
+
+#chat-messages {
+    flex: 1;                   /* 남은 공간 모두 차지 (Expand) */
+    padding: 20px;
+    overflow-y: auto;          /* 스크롤 가능하게 */
+    background-color: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.message-bubble {
+    padding: 12px 18px; border-radius: 18px; max-width: 85%; font-size: 0.95rem;
+    box-shadow: var(--shadow-sm); position: relative; animation: fadeIn 0.3s ease-out;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.ai-message { background-color: var(--bg-white); border-top-left-radius: 4px; align-self: flex-start; }
+.user-message { background-color: var(--bg-chat-user); color: var(--text-chat-user); border-top-right-radius: 4px; align-self: flex-end; }
+
+#chat-input-area {
+    padding: 15px 20px; background: var(--bg-white); border-top: 1px solid #eef0f2;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: relative; z-index: 20;
+}
+/* 자동완성, 칩, 버튼 스타일 등은 v9.2.2와 동일 (생략 없이 포함됨) */
+#autocomplete-results {
+    position: absolute; bottom: 100%; left: 10px; right: 10px;
+    background: var(--bg-white); border: 1px solid #eef0f2; border-radius: 12px 12px 0 0;
+    box-shadow: var(--shadow-lg); max-height: 250px; overflow-y: auto; z-index: 100; margin-bottom: 10px;
+}#autocomplete-results {
+    position: absolute; 
+    bottom: 100%; 
+    left: 10px; 
+    right: 10px;
+    background: var(--bg-white); 
+    border: 1px solid #eef0f2; 
+    border-radius: 12px 12px 0 0;
+    box-shadow: var(--shadow-lg); 
+    max-height: 250px; 
+    overflow-y: auto; 
+    z-index: 99999 !important; /* 무조건 맨 위로 */
+    margin-bottom: 5px;
+}
+
+/* 입력창 감싸는 박스가 자동완성 창을 자르지 않도록 설정 */
+#chat-input-area, #chat-input-area > div {
+    overflow: visible !important;
+}
+.suggestion-item { padding: 14px 16px; border-bottom: 1px solid #f8f9fa; font-size: 0.9rem; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.suggestion-item:hover { background-color: var(--primary-light); }
+.chat-input-field { flex: 1; padding: 12px 20px; border: 2px solid #eef0f2; border-radius: 24px; font-size: 1rem; outline: none; background-color: #fafafa; }
+.chat-input-field:focus { border-color: var(--primary-color); background-color: #fff; }
+.chat-send-button { width: 40px; height: 40px; border-radius: 50%; background: var(--primary-color); color: white; border: none; cursor: pointer; }
+.interest-tag { padding: 8px 16px; border-radius: 20px; border: 1px solid #e0e0e0; cursor: pointer; background: white; }
+.interest-tag.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+
+/* 지도 및 상세 패널 */
+#hotel-detail-panel {
+    position: absolute; bottom: 20px; left: 20px; right: 20px;
+    background: var(--bg-white); border-radius: 20px; box-shadow: var(--shadow-lg); z-index: 100;
+    max-height: 60%; overflow-y: auto; transition: transform 0.3s;
+}
+#hotel-detail-panel.hidden { transform: translateY(150%); }
+#panel-content { padding: 25px; }
+
+/* 결과 화면 */
+#map-panel { flex: 4; min-height: 250px; background: #eef2f5; }
+#itinerary-panel {
+    flex: 6; background: var(--bg-white); border-top-left-radius: 24px; border-top-right-radius: 24px;
+    margin-top: -24px; z-index: 10; display: flex; flex-direction: column;
+}
+#itinerary-content { flex: 1; overflow-y: auto; padding: 20px; background: #fafafa; }
+.activity-card-wrapper { position: relative; padding-left: 28px; margin-bottom: 24px; }
+.activity-card-wrapper::before { content: ''; position: absolute; left: 0; top: 16px; bottom: -30px; width: 2px; background: #e0e0e0; }
+.activity-card-wrapper::after { content: ''; position: absolute; left: -5px; top: 16px; width: 12px; height: 12px; border-radius: 50%; background: var(--primary-color); border: 3px solid var(--bg-white); box-shadow: 0 0 0 2px var(--primary-color); }
+.activity-card { background: var(--bg-white); border-radius: 16px; box-shadow: var(--shadow-sm); border: 1px solid #f0f0f0; overflow: hidden;}
+
+/* 설정 & 프로필 */
+.user-profile { background: var(--bg-white); padding: 30px; border-radius: 24px; box-shadow: var(--shadow-md); display: inline-flex; flex-direction: column; align-items: center; }
+.profile-pic { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 4px solid var(--primary-light); margin-bottom: 15px; }
+.saved-plan-card { background: var(--bg-white); border-radius: 16px; padding: 20px; margin-bottom: 15px; box-shadow: var(--shadow-sm); border: 1px solid #f0f0f0; cursor: pointer; }
+
+
+#tab-bar {
+    display: flex !important; /* 데스크톱에서도 강제로 보이기 */
+}
+#desktop-sidebar {
+    display: none !important; /* 왼쪽 사이드바는 이제 영원히 안녕 */
+}
+#app-wrapper {
+    height: calc(100% - 60px) !important; /* 탭바 높이만큼 공간 확보 */
+}
+.app-phase {
+    display: none !important; 
+    width: 100%;
+    height: 100%;
+    flex-direction: column; /* 내용물 세로 정렬 */
+}
+
+/* 2. 오직 'active' 클래스가 붙은 화면 하나만 보여줍니다. */
+.app-phase.active {
+    display: flex !important;
+}
+
+/* 3. (혹시 모르니) 지도와 결과창이 강제로 튀어나오지 못하게 못 박기 */
+#map-container, #result-container {
+    display: none; /* JS가 active를 주기 전엔 절대 나오지 마 */
+}
+
+#map-container.active, #result-container.active {
+    display: flex !important; /* JS가 부르면 그때 나와 */
+}
+/* --- [v9.3.0 Fix] 데스크톱 화면 분할 (필수 추가) --- */
+@media (min-width: 769px) {
+    /* 결과 모드일 때: 가로 배치(Row)로 변경 */
+    #main-container.mode-results {
+        flex-direction: row !important;
+    }
+
+    /* 결과 모드일 때: 채팅창은 왼쪽 40%로 축소 */
+    #main-container.mode-results #chat-container {
+        width: 40% !important;
+        border-right: 1px solid #e0e0e0;
+        z-index: 2;
+    }
+
+    /* 결과 모드일 때: 지도/결과창은 오른쪽 60%로 표시 */
+    #main-container.mode-results #map-container,
+    #main-container.mode-results #result-container {
+        display: flex !important;
+        width: 60% !important;
+        height: 100% !important;
+        position: relative;
+        z-index: 1;
+    }
+    
+    /* 초기 모드일 때: 지도 숨김 */
+    #main-container.mode-initial #map-container,
+    #main-container.mode-initial #result-container {
+        display: none !important;
+    }
+}
+#hotel-map {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 400px; /* 최소 높이 보장 */
+    background-color: #e5e3df; /* 지도가 안 뜰 때 보이는 구글 지도 기본 회색 */
+    flex-grow: 1;
+}
+
+/* 지도 컨테이너가 화면을 꽉 채우도록 */
+#map-container {
+    height: 100% !important;
+    display: flex;
+    flex-direction: column;
+}
+/* [Fix] 지도 위 이미지/팝업 크기 제한 */
+.map-marker-container {
+    background: white;
+    padding: 4px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    text-align: center;
+}
+
+.map-image-marker {
+    width: 60px !important;     /* 너비 고정 */
+    height: 60px !important;    /* 높이 고정 */
+    object-fit: cover;          /* 비율 유지하며 자르기 */
+    border-radius: 6px;
+    display: block;
+}
+
+.gm-style-iw img {              /* 구글 지도 정보창(InfoWindow) 내부 이미지 제한 */
+    max-width: 200px !important;
+    height: auto !important;
+}
