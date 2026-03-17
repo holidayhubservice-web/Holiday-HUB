@@ -5,7 +5,7 @@ import { determineSearchAnchor, calculateLocationScore } from '../services/locat
 
 // 내부적으로 사용할 타입 정의 (점수가 계산된 호텔)
 type ScoredHotel = HotelEntity & { score: number };
-
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 // =================================================================
 // Rule 1 & 2: 예산 계산 로직
 // =================================================================
@@ -142,7 +142,7 @@ export const getRecommendedHotels = async (
 };
 export const fetchHotelsFromApi = async (params: any) => {
   try {
-    const response = await fetch('http://localhost:5001/find-hotels', {
+    const response = await fetch(`${API_BASE_URL}/find-hotels`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

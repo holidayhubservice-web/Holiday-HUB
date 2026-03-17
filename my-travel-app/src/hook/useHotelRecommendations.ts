@@ -11,7 +11,7 @@ export const useHotelRecommendations = (tripInfo: SearchParams | null) => {
   const [data, setData] = useState<{ recommendedHotels: HotelEntity[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
   useEffect(() => {
     // 1. 검색 조건이 없으면 아무것도 안 함
     if (!tripInfo) return;
@@ -25,7 +25,7 @@ export const useHotelRecommendations = (tripInfo: SearchParams | null) => {
         console.log(`🌐 React: Asking Python Server about ${tripInfo.destination}...`);
 
         // 2. 파이썬 서버(5001번 포트)로 요청 전송
-        const response = await fetch('https://holidayhubservice.com/find-hotels', {
+        const response = await fetch(`${API_BASE_URL}/find-hotels`, { 
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

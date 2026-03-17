@@ -12,7 +12,7 @@ export default function AutocompleteInput({ onSelect, placeholder, locationBias,
   const [input, setInput] = useState('');
   const [predictions, setPredictions] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
-
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
   // 1. [교정] useEffect 로직: 여기서만 API를 호출합니다.
   useEffect(() => {
     const loadPredictions = async () => {
@@ -24,7 +24,7 @@ export default function AutocompleteInput({ onSelect, placeholder, locationBias,
 
       try {
         // [중요] 5001번 포트 백엔드로 고정
-        const url = `http://localhost:5001/autocomplete?query=${encodeURIComponent(input)}` + 
+        const url = `${API_BASE_URL}/autocomplete?query=${encodeURIComponent(input)}` + 
                     `&type=${searchType || 'place'}` + // city 인지 place 인지 전달
                     (locationBias ? `&lat=${locationBias.lat}&lng=${locationBias.lng}` : "");
 

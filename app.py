@@ -17,7 +17,17 @@ import collections
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 # CORS: 개발 편의성을 위해 모든 Origin 허용
-CORS(app, resources={r"/*": {"origins": ["https://holidayhubservice.com"]}})
+CORS(app, resources={r"/*": {"origins": [
+
+"https://holidayhubservice.com",
+
+"https://www.holidayhubservice.com",
+
+"http://localhost:5173", # Vite 기본 포트
+
+"http://localhost:3000"
+
+]}})
 
 # 캐시 제어
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0

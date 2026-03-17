@@ -96,7 +96,7 @@ function App() {
   const [planData, setPlanData] = useState<any>(null);
   const [selectedPlaces, setSelectedPlaces] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
   const duration = (() => {
     if (!dates.start || !dates.end) return 3;
     const start = new Date(dates.start);
@@ -231,7 +231,7 @@ const handleHotelSelect = async (hotel: HotelEntity) => {
   setCurrentStep('planning'); // 🟢 먼저 단계를 바꿔서 UI 레이아웃을 '지도+리스트' 모드로 전환합니다.
   setIsLoading(true); //
   try {
-    const response = await fetch('https://holidayhubservice.com/create-plan', {
+    const response = await fetch(`${API_BASE_URL}/create-plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
