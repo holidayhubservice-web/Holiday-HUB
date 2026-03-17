@@ -300,7 +300,8 @@ const handleDestinationSelect = async (selected: any) => {
 
   try {
     // 백엔드 API 호출
-    const res = await fetch(`https://holidayhubservice.com/place-details?place_id=${selected.place_id}`);
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+    const res = await fetch(`${API_BASE_URL}/place-details?place_id=${selected.place_id}`);
     if (!res.ok) throw new Error(`Server responded with status: ${res.status}`);
 
     const data = await res.json();
