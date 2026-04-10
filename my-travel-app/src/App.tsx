@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useHotelRecommendations } from './hook/useHotelRecommendations';
 import type { HotelEntity, SearchParams } from './types/travel';
 import AutocompleteInput from './components/chat/AutocompleteInput';
-import logoImg from './assets/logo.png';
 import { ReactSortable } from 'react-sortablejs';
 import { fetchHotelsFromApi } from './domain/hotelLogic';
 import { Map, AdvancedMarker, Pin, APIProvider, InfoWindow, Marker } from '@vis.gl/react-google-maps';
@@ -269,7 +268,7 @@ const handleHotelSelect = async (hotel: HotelEntity) => {
     }
   } catch (error) {
     logError(error);
-    alert("일정 생성 중 오류가 발생했습니다 파트너!");
+    alert("An error occurred while creating the schedule. Partner!");
   } finally {
     setIsLoading(false); // 🟢 [추가] 성공하든 실패하든 로딩 종료!
   }
@@ -393,7 +392,7 @@ type: 'text'
   <div className="w-16"></div> 
   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
     <img 
-      src={logoImg} 
+      src="/logo.png"
       alt="Holiday Hub Logo" 
       /* 모바일에서는 h-8, PC에서는 h-10으로 설정하여 상하 여백(숨구멍)을 줍니다 */
       className="h-10 md:h-12 w-auto object-contain cursor-pointer hover:opacity-80 transition-opacity" 
