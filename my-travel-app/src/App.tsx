@@ -96,6 +96,7 @@ function App() {
   const [planData, setPlanData] = useState<any>(null);
   const [selectedPlaces, setSelectedPlaces] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const today = new Date().toISOString().split('T')[0];
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
   const duration = (() => {
     if (!dates.start || !dates.end) return 3;
@@ -111,6 +112,13 @@ function App() {
       setMessages([{ id: 1, role: 'assistant', text: "Hello! 👋 I'm Holiday Hub.\nWhere would you like to travel?", type: 'text' }]);
     }, 1000);
   }, []);
+
+  useEffect(() => {
+    // 메시지가 추가되거나, 플랜이 생성되거나, 호텔이 떴을 때 맨 아래로 부드럽게 스크롤
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, planData, hotelData]);
 
   useEffect(() => {
   // 데이터가 있고, 현재 단계가 호텔 선택 단계일 때 실행
@@ -379,13 +387,25 @@ type: 'text'
    <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
   <div className="h-screen flex flex-col bg-white overflow-hidden">
     {/* 1. 고정 헤더 */}
-    <header className="bg-white px-4 py-3 border-b flex items-center justify-between z-50">
-      <div className="flex items-center gap-2">
-        <img src={logoImg} alt="Logo" className="w-8 h-8" />
-        <span className="font-bold text-gray-800">Holiday Hub</span>
-      </div>
-      <button onClick={() => window.location.reload()} className="text-sm text-blue-600">Reset</button>
-    </header>
+    <header className="bg-white px-4 py-3 border-b-2 border-teal-100 flex items-center justify-between z-50 relative">
+  
+  {/* 좌측 여백 (레이아웃 균형용) */}
+  <div className="w-16"></div> 
+  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
+    <img 
+      src={logoImg} 
+      alt="Holiday Hub Logo" 
+      /* 모바일에서는 h-8, PC에서는 h-10으로 설정하여 상하 여백(숨구멍)을 줍니다 */
+      className="h-10 md:h-12 w-auto object-contain cursor-pointer hover:opacity-80 transition-opacity" 
+      onClick={() => window.location.reload()}
+    />
+  </div>
+
+  {/* 우측 Reset 버튼 (민트 컬러 적용) */}
+  <button onClick={() => window.location.reload()} className="text-sm font-bold text-teal-600 hover:text-teal-800 z-10 transition-colors">
+    Reset
+  </button>
+</header>
 
     {/* 2. 본문 컨테이너 (지도 + 리스트) */}
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -409,6 +429,7 @@ type: 'text'
     <PlanningLayer 
       selectedHotel={selectedHotel} 
       dailyPlan={planData[currentDay] || []} 
+      
     />
   )}
 
@@ -453,8 +474,10 @@ type: 'text'
         {messages.map((msg) => (
           <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
             {/* 메시지 텍스트 렌더링 ... */}
-            <div className={`max-w-[80%] p-3 rounded-2xl shadow-sm mb-2 ${
-              msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-gray-800 border'
+            <div className={`max-w-[80%] p-3.5 rounded-2xl shadow-sm mb-2 text-sm ${
+              msg.role === 'user' 
+                ? 'bg-teal-500 text-white rounded-br-none' // 유저 말풍선: 로고의 진한 민트색
+                : 'bg-white text-gray-800 border border-teal-100 rounded-bl-none shadow-teal-50/50' // AI 말풍선: 깨끗한 흰색 + 연한 민트 테두리
             }`}>
               {msg.text}
             </div>
@@ -470,11 +493,13 @@ type: 'text'
             <div className="grid grid-cols-2 gap-2">
               <input 
                 type="date" 
+                min={today}
                 onChange={(e) => setDates(prev => ({ ...prev, start: e.target.value }))}
                 className="p-2 border rounded-lg text-sm"
               />
               <input 
                 type="date" 
+                min={dates.start || today}
                 onChange={(e) => setDates(prev => ({ ...prev, end: e.target.value }))}
                 className="p-2 border rounded-lg text-sm"
               />
@@ -719,41 +744,50 @@ type: 'text'
             <button
               key={day}
               onClick={() => handleChatInput(day)}
-              className="flex-shrink-0 px-4 py-2 bg-blue-100 text-blue-700 rounded-full font-bold text-sm"
+              className="flex-shrink-0 px-4 py-2 bg-teal-50 text-teal-700 rounded-full font-bold text-sm"
             >
-            
               Day {day}
-              
             </button>
           ))}
         </div>
       ) : (
         /* 상황 B: 검색창 및 Skip 버튼 */
         <div className="flex flex-col gap-3">
+          
+          {/* 🟢 수정 완료: 중복 조건문 제거 및 div 닫기 */}
           {currentStep === 'destination' && (
-            <AutocompleteInput 
-              onSelect={handleDestinationSelect}
-              searchType="city"                 
-              placeholder="Which city would you like to visit?"
-            />
+            <div className="flex flex-col gap-2 w-full animate-fade-in">
+              {/* 시각적 넛지: 로고의 민트 컬러 텍스트 활용 */}
+              <div className="text-center mb-1">
+                <span className="text-[11px] font-bold text-teal-600 bg-teal-50 px-3 py-1 rounded-full">
+                  ✨ Quick plan, quick go
+                </span>
+              </div>
+              <AutocompleteInput 
+                onSelect={handleDestinationSelect}
+                searchType="city"                
+                placeholder="Which city would you like to visit?"
+              />
+            </div> /* <--- 빠졌던 닫는 태그 복구 완료! */
           )}
-            {currentStep === 'dates' && (
-                    <div className="text-center py-2">
-                      <p className="text-sm font-medium text-blue-600 animate-pulse">
-                        Please select your travel dates 📅
-                      </p>
-                    </div>
-                  )}
+
+          {currentStep === 'dates' && (
+            <div className="text-center py-2">
+              <p className="text-sm font-medium text-teal-600 animate-pulse">
+                Please select your travel dates 📅
+              </p>
+            </div>
+          )}
+
           {currentStep === 'must-visit' && (
             <>
-              {/* 🟢 Skip 버튼: 텍스트 입력창 바로 위에 배치 */}
+              {/* Skip 버튼 */}
               <button 
                 onClick={() => handleChatInput('SKIP_MUST_VISIT')}
-                className="w-full py-2 text-xs font-bold text-gray-700 hover:text-blue-700 transition-colors bg-gray-50 rounded-lg border border-dashed border-gray-300"
+                className="w-full py-2 text-xs font-bold text-gray-700 hover:text-teal-700 transition-colors bg-gray-50 rounded-lg border border-dashed border-gray-300"
               >
                 Don't have any places to add? Skip ⏭️
               </button>
-
               <AutocompleteInput 
                 onSelect={handleMustVisitSelect} 
                 searchType="place"                 
