@@ -57,6 +57,14 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ item, idx, intensity
             </h4>
           </div>
 
+        <div className="flex flex-wrap gap-1 mt-1.5 mb-2">
+                      {item.details?.summary_tags?.map((tag: string, i: number) => (
+                        <span key={i} className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded-md text-[10px] font-bold border border-teal-100">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+
           {/* 체류 시간 표시 부분 */}
           <div className="flex items-center justify-between mt-4">
             <div className="flex items-center gap-1 text-blue-600">

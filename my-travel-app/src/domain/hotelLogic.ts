@@ -80,14 +80,9 @@ export const getRecommendedHotels = async (
   // 후보군 필터링
   const candidates = scoredHotels.filter((h) => {
     // A: 예산보다 쌈 (OK)
-    if (h.price_Per_Night <= targetPrice) return true;
-    
-    // B: 예산 ~ +10% (OK)
-    if (h.price_Per_Night <= baseMax) return true;
-    
-    // C: +10% ~ +20% (위치 점수 80점 이상만 OK)
-    if (h.price_Per_Night <= extendedMax && h.score >= 80) return true;
-
+    if (h.pricePerNight <= targetPrice) return true;
+    if (h.pricePerNight <= baseMax) return true;
+    if (h.pricePerNight <= extendedMax && h.score >= 80) return true;
     return false;
   });
 
@@ -97,13 +92,13 @@ export const getRecommendedHotels = async (
     // 점수 차이가 10점 이상이면 점수 우선 (위치 중요)
     if (Math.abs(a.score - b.score) > 10) return b.score - a.score;
     // 비슷하면 예산에 가까운 순서 (가격 정확도 중요)
-    return Math.abs(a.price_Per_Night - targetPrice) - Math.abs(b.price_Per_Night - targetPrice);
+    return Math.abs(a.pricePerNight - targetPrice) - Math.abs(b.pricePerNight - targetPrice);
   };
 
   // 그룹핑
-  const cheapGroup = candidates.filter(h => h.price_Per_Night < targetPrice).sort(sorter);
-  const averageGroup = candidates.filter(h => h.price_Per_Night >= targetPrice && h.price_Per_Night <= baseMax).sort(sorter);
-  const expensiveGroup = candidates.filter(h => h.price_Per_Night > baseMax).sort(sorter);
+  const cheapGroup = candidates.filter(h => h.pricePerNight < targetPrice).sort(sorter);
+  const averageGroup = candidates.filter(h => h.pricePerNight >= targetPrice && h.pricePerNight <= baseMax).sort(sorter);
+  const expensiveGroup = candidates.filter(h => h.pricePerNight > baseMax).sort(sorter);
 
   // 최종 5개 슬롯 채우기
   const finalSelection: HotelEntity[] = [];

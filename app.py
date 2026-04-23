@@ -11,6 +11,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS 
 import config
 import collections
+import random
 
 # ==========================================
 # 1. 앱 설정 (App Config)
@@ -82,11 +83,12 @@ INTEREST_MAP = {
 }
 
 
-DAILY_API_LIMIT = 200  # 하루 전체 호출 제한
-USER_DAILY_LIMIT = 50   # 사용자당 생성 제한
+DAILY_API_LIMIT = 300  # 하루 전체 호출 제한
+USER_DAILY_LIMIT = 100   # 사용자당 생성 제한
 api_call_count = 0     # 오늘 총 호출 횟수
 user_usage = {}        # 사용자별 호출 기록 { 'IP': count }
 last_reset_date = datetime.now().date()
+SHADOW_CACHE = {}
 
 def check_api_budget():
     global api_call_count, last_reset_date, user_usage
@@ -97,11 +99,11 @@ def check_api_budget():
         last_reset_date = current_date
     
     if api_call_count >= DAILY_API_LIMIT:
-        return False, "오늘의 서비스 에너지가 모두 소진되었습니다. 내일 다시 와주세요!"
+        return False, "Our daily service energy is fully depleted. Please come back tomorrow!"
     
     user_ip = request.remote_addr
     if user_usage.get(user_ip, 0) >= USER_DAILY_LIMIT:
-        return False, "오늘의 생성 한도를 초과했습니다. 내일 더 멋진 계획을 세워봐요!"
+        return False, "You've reached your daily generation limit! Come back tomorrow to plan your next adventure."
     return True, "OK"
 
 def log_api_cost(api_name, cost_usd):
@@ -418,6 +420,7 @@ def find_hotels_logic(data):
     # 1. 예산 및 타겟 가격 계산
     total_budget = float(data.get('budget', 2000))
     duration = int(data.get('duration', 3))
+    rooms = int(data.get('rooms', 1))
     target_price = (total_budget * 0.25) / max(1, duration - 1)
     
     center = _get_city_center(dest)
@@ -431,15 +434,15 @@ def find_hotels_logic(data):
     
     # [수정 포인트] body 정의가 API 요청보다 '반드시' 위에 있어야 합니다!
     # 쿼리 전략: 예산이 $100 미만이면 'hostel', 아니면 'hotel' 검색
-    query_term = "hostel" if target_price < 100 else "hotel"
+    smart_hotel_query = f"top rated hotels, luxury resorts, and affordable hostels in {dest}"
     
     body = { 
-        "textQuery": f"best {query_term} in {dest}",
-        "maxResultCount": 20, 
+        "textQuery": smart_hotel_query,
+        "maxResultCount": 20, # 구글의 1회 최대 한도 제한 준수 (3초 컷 보장)
         "locationBias": { "circle": { "center": center, "radius": 10000.0 } } 
     }
     
-    # API 요청 (이제 body가 위에 있으니 에러가 안 납니다)
+    # 이제 구글 API를 단 '1번'만 찌릅니다.
     res = _make_api_request(PLACES_API_URL_TEXT, method='post', json_data=body, headers=headers)
     
     # 중복 제거를 위한 ID 저장소
@@ -500,11 +503,14 @@ def find_hotels_logic(data):
             seen_ids.add(p['id'])
             
     output.sort(key=lambda x: x.get('rating', 0), reverse=True)
-    return {"hotels": output[:5]}
-   
+    top_candidates = output[:5] 
+    random.shuffle(top_candidates) # 매번 다른 호텔이 상단에 오도록 섞어줍니다
+    
+    return {"hotels": top_candidates}
     
 
 def generate_plan_logic(data):
+    
     # 🚨 [입구] 데이터 수신 및 예산 체크
     logging.info(f"📡 [INCOMING DATA]: {data}")
     is_ok, msg = check_api_budget()
@@ -532,8 +538,8 @@ def generate_plan_logic(data):
         # [설정] 여행 강도 및 소요 시간
         intensity_settings = {
             'relaxed': {'stops': 4, 'multiplier': 1.0},
-            'moderate': {'stops': 6, 'multiplier': 0.9},
-            'adventurous': {'stops': 8, 'multiplier': 0.7}
+            'moderate': {'stops': 5, 'multiplier': 0.9},
+            'adventurous': {'stops': 7, 'multiplier': 0.7}
         }
         settings = intensity_settings.get(intensity, intensity_settings['moderate'])
         stops_per_day, time_multiplier = settings['stops'], settings['multiplier']
@@ -581,33 +587,69 @@ def generate_plan_logic(data):
                 seen_ids.add(p_id)
 
         # 4. [주변 장소 수집]
-        search_queries = [f"top attractions in {dest}"] + [f"best {i} in {dest}" for i in interests[:3]]
         candidates = {}
-        for q in list(set(search_queries)): 
-            res = _make_api_request(PLACES_API_URL_TEXT, method='post', json_data={ "textQuery": q, "maxResultCount": 20 }, headers=headers)
-            if res and res.get('places'):
-                for p in res['places']: candidates[p['id']] = p
-
-        # 🚀 [여기서부터 새로 추가된 로직!] 2차 로컬 검색 (Progressive Expansion)
-        target_places_count = (duration * stops_per_day) + 10 # 11일 * 6곳 = 66 + 10 = 76곳 목표
         
-        if len(candidates) < target_places_count:
-            logging.warning(f"🚨 장소 긴급 보충 시작! ({len(candidates)}/{target_places_count})")
-            # 'best' 꼬리표를 뗀 보편적인 로컬 키워드 투입
-            backup_queries = [
-                f"popular local cafes in {dest}", 
-                f"parks and nature in {dest}", 
-                f"shopping malls in {dest}"
-            ]
-            for q in backup_queries:
-                res = _make_api_request(PLACES_API_URL_TEXT, method='post', json_data={ "textQuery": q, "maxResultCount": 20 }, headers=headers)
-                if res and res.get('places'):
-                    for p in res['places']: candidates[p['id']] = p
+        # [목표치 설정] 억지로 많이 찾지 않습니다. 유저 일정(duration * stops_per_day) + 딱 5개의 여유분(Buffer)만 목표로 합니다.
+        target_places_count = (duration * stops_per_day) + 5 
 
-        # 5. [데이터 가공 및 정렬]
+        interests_key = ",".join(interests)
+        cache_key = f"{dest}_{interests_key}"
+        
+        global SHADOW_CACHE
+        if cache_key in SHADOW_CACHE and SHADOW_CACHE[cache_key]:
+            logging.info(f"⚡ [Shadow Cache Hit!] 유저가 고민하는 동안 준비한 {len(SHADOW_CACHE[cache_key])}개의 장소 0.1초 즉시 로드!")
+            # 창고에 있는 데이터를 그대로 복사해서 가져옵니다
+            candidates = SHADOW_CACHE[cache_key].copy()
+        else:
+            logging.info("🐢 [Cache Miss] 창고가 비어있어 실시간 수집을 시작합니다.")
+        
+        # ---------------------------------------------------------
+        # [Step 1] 핵심 닻(Anchor) 쿼리: 가장 먼저 20개를 긁어옵니다.
+        # ---------------------------------------------------------
+        combined_interests = ", ".join(interests[:3])
+        primary_query = f"top attractions, {combined_interests} in {dest}" if combined_interests else f"top tourist attractions in {dest}"
+        
+        logging.info(f"🔎 [Step 1: Primary Query]: {primary_query}")
+        res = _make_api_request(PLACES_API_URL_TEXT, method='post', 
+                                json_data={ "textQuery": primary_query, "maxResultCount": 20 }, 
+                                headers=headers)
+        if res and res.get('places'):
+            for p in res['places']: candidates[p['id']] = p
+
+        # ---------------------------------------------------------
+        # [Step 2] 1차 백업 쿼리: Step 1만으로 '황금비율(목표치)'을 못 채웠을 때만 지갑을 엽니다.
+        # ---------------------------------------------------------
+        if len(candidates) < target_places_count:
+            logging.info(f"⚖️ [Step 2 발동] 장소 추가 확보 필요 ({len(candidates)}/{target_places_count})")
+            
+            backup_query = f"popular local cafes, beautiful parks, and shopping malls in {dest}"
+            res2 = _make_api_request(PLACES_API_URL_TEXT, method='post', 
+                                     json_data={ "textQuery": backup_query, "maxResultCount": 20 }, 
+                                     headers=headers)
+            if res2 and res2.get('places'):
+                for p in res2['places']: candidates[p['id']] = p
+
+        # ---------------------------------------------------------
+        # [Step 3] 장기 여행(5일+) 부스터: 그래도 모자랄 때만 최후의 지갑을 엽니다.
+        # ---------------------------------------------------------
+        if duration >= 5 and len(candidates) < target_places_count:
+            logging.info(f"🚀 [Step 3 발동] 장기 여행 부스터 가동 ({len(candidates)}/{target_places_count})")
+            
+            long_trip_query = f"hidden gems, local markets, museums, and historical sites in {dest}"
+            res3 = _make_api_request(PLACES_API_URL_TEXT, method='post', 
+                                     json_data={ "textQuery": long_trip_query, "maxResultCount": 20 }, 
+                                     headers=headers)
+            if res3 and res3.get('places'):
+                for p in res3['places']: candidates[p['id']] = p
+
+        logging.info(f"✨ [황금비율 수집 완료] 최종 확보된 고유 장소: {len(candidates)}개 (목표: {target_places_count}개)")
+
+# =========================================================
+        # 🩹 [복구 완료] 5. [데이터 가공 및 정렬] 
+        # =========================================================
         all_places_list = list(candidates.values())
         
-        # 🛑 스코어링 함수 (함수 내부에서 hotel_loc 등을 안전하게 참조)
+        # 🛑 스코어링 함수 (거리가 가깝고, 평점이 높고, 관심사에 맞는 곳 가산점)
         def get_combined_score(p):
             try:
                 p_loc = p.get('location')
@@ -617,18 +659,22 @@ def generate_plan_logic(data):
                 return d_score + _calculate_quality_score(p) + _calculate_relevance_score(p, interests)
             except: return 0
 
-        # 🛑 [수정됨] 유연한 필터 적용: dest 대신 target_places_count를 넘겨줍니다.
-        smart_list = filter_and_score_places(all_places_list, target_places_count)
-        
-        # [최종 후보 확정 - 로직 단순화]
+        # 유연한 필터 적용
+        actual_needed_slots = duration * stops_per_day
+        smart_list = filter_and_score_places(all_places_list, actual_needed_slots)
+
+        # [최종 후보 확정] 필터를 통과한 애들을 점수순으로 정렬해서 'cand_list'를 만듭니다!
         source = smart_list if smart_list else all_places_list
         cand_list = sorted(source, key=get_combined_score, reverse=True)
 
         logging.info(f"✅ DEBUG: cand_list 정렬 완료 ({len(cand_list)}개)")
+        # =========================================================
 
-        # 6. [일정 배분 루프]
+        # 6. [일정 배분 루프] (이 아래부터는 기존 코드 그대로 유지)
         daily_plan = {}
-        sectors = ["NE", "SE", "SW", "NW"] # 하루에 하나씩 쓸 구역 조각들
+        sectors = ["NE", "SE", "SW", "NW"]
+
+
 
         for i in range(duration):
             day_items = pre_assigned_plans.get(i, [])
@@ -666,25 +712,34 @@ def generate_plan_logic(data):
                 
                 if not selected_p: break 
                 
-                p_name = selected_p.get('displayName', {}).get('text', 'Place')
-                day_items.append({
-                    "type": "Activity",
-                    "details": {
-                        "id": selected_p.get('id'), "name": p_name, "location": selected_p.get('location'),
-                        "rating": selected_p.get('rating', 0),
-                        "image_url": f"https://places.googleapis.com/v1/{selected_p['photos'][0]['name']}/media?key={config.GOOGLE_API_KEY}&maxHeightPx=400" if selected_p.get('photos') else fallback_activity_imgs[0],
-                        "google_map_url": f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(p_name)}&query_place_id={selected_p.get('id')}",
-                        "summary_tags": [t for t in selected_p.get('types', []) if t != 'point_of_interest'][:2]
-                    },
-                    "travel_details": { 
+                try:
+                    p_name = selected_p.get('displayName', {}).get('text', 'Place')
+                    day_items.append({
+                        "type": "Activity",
+                        "details": {
+                            "id": selected_p.get('id'), 
+                            "name": p_name, 
+                            "location": selected_p.get('location'),
+                            "rating": selected_p.get('rating', 0),
+                            # 사진이 없어도 터지지 않도록 안전하게 처리 (fallback 이미지 사용)
+                            "image_url": f"https://places.googleapis.com/v1/{selected_p['photos'][0]['name']}/media?key={config.GOOGLE_API_KEY}&maxHeightPx=400" if selected_p.get('photos') else fallback_activity_imgs[0],
+                            "google_map_url": f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(p_name)}&query_place_id={selected_p.get('id')}",
+                            "summary_tags": [t for t in selected_p.get('types', []) if t != 'point_of_interest'][:2]
+                        },
+                        "travel_details": {
                         "driving": _estimate_travel_time_fallback(curr, selected_p.get('location'), 'driving'), 
                         "walking": _estimate_travel_time_fallback(curr, selected_p.get('location'), 'walking'), 
                         "transit": _estimate_travel_time_fallback(curr, selected_p.get('location'), 'transit'), 
                         "stay_duration": 90 
                     }
-                })
-                seen_ids.add(selected_p.get('id'))
-                curr = selected_p.get('location')
+                    })
+                    seen_ids.add(selected_p.get('id'))
+                    curr = selected_p.get('location')
+
+                except Exception as e:
+                    # 에러가 난 장소는 쿨하게 버리고 다음 장소로 넘어갑니다!
+                    logging.warning(f"⚠️ [Partial Success] 특정 장소 파싱 실패, 건너뜁니다: {str(e)}")
+                    continue
             
             daily_plan[f"Day {i+1}"] = day_items
 
@@ -694,7 +749,7 @@ def generate_plan_logic(data):
     except Exception as e:
         # 🛡️ 어떤 오류가 나도 여기서 잡아서 터미널에 뿌립니다.
         logging.critical(f"❌ CRITICAL PLAN ERROR: {str(e)}", exc_info=True)
-        return {"error": f"일정 생성 중 오류 발생: {str(e)}"}
+        return {"error": f"Error during plan generation: {str(e)}"}
 
 def _calculate_bearing(loc1, loc2):
     """두 좌표간 방위각 계산"""
@@ -726,6 +781,7 @@ def find_hotels_route():
 def create_plan_route():
     data = request.get_json()
     res = generate_plan_logic(data)
+
     if res is None:
         return jsonify({"error": "No data returned"}), 500
         
@@ -733,7 +789,7 @@ def create_plan_route():
         # 500이 아니라 400으로 줘야 서버가 죽은 것과 구분됩니다.
         return jsonify(res), 400 
         
-    return jsonify({"status": "success", "daily_plan": res.get("plan")})
+    return jsonify(res)
 
 @app.route('/autocomplete', methods=['GET'])
 def autocomplete_proxy():
@@ -799,3 +855,66 @@ def place_details_proxy():
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5001, debug=True)
+
+
+SHADOW_CACHE = {}
+
+@app.route('/prefetch-places', methods=['POST', 'OPTIONS'])
+def prefetch_places_route():
+  
+    data = request.get_json()
+    dest = data.get('destination')
+    interests = data.get('interests', [])
+    interests_key = ",".join(interests) 
+    duration = int(data.get('duration', 3))
+    
+    # 🧠 [Adaptive Logic] 유저의 일정 길이에 맞춰 목표치 계산 (불필요한 API 낭비 방지)
+    stops_per_day = 5 # 백그라운드 수집용 넉넉한 기본값
+    target_places_count = (duration * stops_per_day) + 5
+    cache_key = f"{dest}_{interests_key}"
+    
+    # 이미 충분히 수집했다면 조용히 종료 (비용 세이브)
+    if cache_key in SHADOW_CACHE and len(SHADOW_CACHE[cache_key]) >= target_places_count:
+        return jsonify({"status": "already pre-fetched", "count": len(SHADOW_CACHE[cache_key])})
+        
+    logging.info(f"🕵️‍♂️ [Adaptive Shadow Fetching] 백그라운드 수집 시작 (목표: {target_places_count}개)")
+    
+    headers = { 
+        "Content-Type": "application/json", 
+        "X-Goog-Api-Key": config.GOOGLE_API_KEY, 
+        # 🌟 [Freshness] 영업시간(regularOpeningHours)과 비즈니스 상태(businessStatus) 추가!
+        "X-Goog-FieldMask": "places.id,places.displayName,places.types,places.rating,places.location,places.photos,places.userRatingCount,places.regularOpeningHours,places.businessStatus" 
+    }
+    
+    candidates = {}
+    
+    # [Step 1] 핵심 명소 쿼리
+    combined_interests = ", ".join(interests[:3])
+    primary_query = f"top attractions, {combined_interests} in {dest}" if combined_interests else f"top tourist attractions in {dest}"
+    res1 = _make_api_request(PLACES_API_URL_TEXT, method='post', json_data={ "textQuery": primary_query, "maxResultCount": 20 }, headers=headers)
+    if res1 and res1.get('places'):
+        # 🌟 폐업(CLOSED_PERMANENTLY)된 곳은 아예 수집 창고에 넣지 않습니다!
+        for p in res1['places']: 
+            if p.get('businessStatus') != 'CLOSED_PERMANENTLY': candidates[p['id']] = p
+            
+    # [Step 2] 1차 백업 쿼리
+    if len(candidates) < target_places_count:
+        backup_query = f"popular local cafes, beautiful parks, and shopping malls in {dest}"
+        res2 = _make_api_request(PLACES_API_URL_TEXT, method='post', json_data={ "textQuery": backup_query, "maxResultCount": 20 }, headers=headers)
+        if res2 and res2.get('places'):
+            for p in res2['places']: 
+                if p.get('businessStatus') != 'CLOSED_PERMANENTLY': candidates[p['id']] = p
+
+    # [Step 3] 장기 여행 부스터
+    if duration >= 5 and len(candidates) < target_places_count:
+        long_trip_query = f"hidden gems, local markets, museums, and historical sites in {dest}"
+        res3 = _make_api_request(PLACES_API_URL_TEXT, method='post', json_data={ "textQuery": long_trip_query, "maxResultCount": 20 }, headers=headers)
+        if res3 and res3.get('places'):
+            for p in res3['places']: 
+                if p.get('businessStatus') != 'CLOSED_PERMANENTLY': candidates[p['id']] = p
+
+    # 긁어온 데이터를 서버 창고에 예쁘게 적재!
+    SHADOW_CACHE[cache_key] = candidates
+    logging.info(f"✨ [Shadow Fetching 완료] {len(candidates)}개의 신선한 장소 장전 완료!")
+    
+    return jsonify({"status": "success", "count": len(candidates)})

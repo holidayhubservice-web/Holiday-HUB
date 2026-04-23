@@ -8,6 +8,7 @@ import { Map, AdvancedMarker, Pin, APIProvider, InfoWindow, Marker } from '@vis.
 import PlanningLayer from './components/PlanningLayer.tsx';
 import { ActivityCard } from './components/ActivityCard.tsx';
 import type { TravelIntensity } from './utils/travelLogic';
+import { trackEvent } from './services/analytics';
 // 메시지 타입 정의
 interface Message {
   id: number;
@@ -93,6 +94,7 @@ function App() {
   const { data: hotelData, loading: hotelLoading } = useHotelRecommendations(tripInfo);
   const [selectedHotel, setSelectedHotel] = useState<HotelEntity | null>(null);
   const [planData, setPlanData] = useState<any>(null);
+  const [isPrefetched, setIsPrefetched] = useState(false);
   const [selectedPlaces, setSelectedPlaces] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const today = new Date().toISOString().split('T')[0];
@@ -136,6 +138,52 @@ function App() {
     });
   }
 }, [hotelData, currentStep]);
+
+useEffect(() => {
+    if (hotelData && hotelData.recommendedHotels.length > 0 && currentStep === 'hotels') {
+      setMessages(prev => {
+        if (prev[prev.length - 1]?.type === 'hotel-list') return prev;
+        return [...prev, {
+          id: Date.now(),
+          role: 'assistant',
+          text: "Here are my top recommendations based on your budget:",
+          type: 'hotel-list'
+        }];
+      });
+    }
+  }, [hotelData, currentStep]);
+
+  // =========================================================
+  // 🚀 [신규 추가] 그림자 수집 (Shadow Fetching) 트리거
+  // =========================================================
+  useEffect(() => {
+    // 호텔이 화면에 떴고, 아직 수집을 안 했다면 백그라운드에서 조용히 실행!
+    if (hotelData && hotelData.recommendedHotels.length > 0 && currentStep === 'hotels' && !isPrefetched) {
+      console.log("🕵️‍♂️ [Shadow Fetching] 유저가 호텔을 고민하는 동안 장소를 몰래 긁어옵니다...");
+      
+      // 중복 실행 방지를 위해 바로 true로 변경
+      setIsPrefetched(true); 
+
+      // 🔥 await 없이 던져놓고 잊어버립니다 (Fire and Forget). 유저 화면은 멈추지 않습니다.
+      fetch(`${API_BASE_URL}/prefetch-places`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          destination: destination, 
+          interests: selectedInterests, 
+          duration: duration 
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+         console.log(`✨ [Shadow Fetching 완료] ${data.count}개의 장소가 서버 창고에 장전되었습니다!`);
+      })
+      .catch(e => {
+         // 에러가 나도 앱은 터지지 않고 조용히 넘어갑니다. (나중에 진짜 클릭할 때 다시 검색하면 됨)
+         console.warn("⚠️ 그림자 수집 실패 (앱 정상 작동):", e);
+      });
+    }
+  }, [hotelData, currentStep, isPrefetched, destination, selectedInterests, duration, API_BASE_URL]);
 
   const handleChatInput = async (value: any) => {
     if (!value) return;
@@ -204,7 +252,8 @@ function App() {
 
   const handleDateTravelerSubmit = () => {
     if (!dates.start || !dates.end) return alert("Please select dates!");
-    setMessages(prev => [...prev, { id: Date.now(), role: 'user', text: `${dates.start} ~ ${dates.end} (${travelers.adults + travelers.children} travelers)` }]);
+    const summaryText = `${dates.start} ~ ${dates.end} (${travelers.adults} Adults, ${travelers.children} Kids, ${budgetInfo.rooms} Rooms)`;
+    setMessages(prev => [...prev, { id: Date.now(), role: 'user', text: summaryText }]);
     setTimeout(() => {
       setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', text: "Understood. Is there any specific place you MUST visit?", type: 'text' }]);
       setCurrentStep('must-visit');
@@ -234,9 +283,17 @@ function App() {
 };
 
 const handleHotelSelect = async (hotel: HotelEntity) => {
+  // 🟢 1. [시작] 시간 측정 및 이벤트 전송
+  const startTime = Date.now();
+  trackEvent('plan_generation_started', { 
+    destination: destination,
+    hotel_name: hotel.name 
+  });
+
   setSelectedHotel(hotel);
-  setCurrentStep('planning'); // 🟢 먼저 단계를 바꿔서 UI 레이아웃을 '지도+리스트' 모드로 전환합니다.
-  setIsLoading(true); //
+  setCurrentStep('planning');
+  setIsLoading(true); 
+
   try {
     const response = await fetch(`${API_BASE_URL}/create-plan`, {
       method: 'POST',
@@ -254,23 +311,46 @@ const handleHotelSelect = async (hotel: HotelEntity) => {
 
     const result = await response.json();
 
-    if (result.daily_plan) {
-      setPlanData(result.daily_plan);
+    // 🛡️ 가짜 성공 방어막: 파이썬이 에러 메시지를 보냈다면 강제로 에러를 발생시킴!
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    if (result.plan) {
+      // 🟢 2. [성공] 걸린 시간(ms) 계산 및 성공 이벤트 전송
+      const durationMs = Date.now() - startTime;
+      trackEvent('plan_generation_success', { 
+        destination: destination,
+        time_taken_ms: durationMs,
+        hotel_name: hotel.name
+      });
+
+      setPlanData(result.plan); // 파이썬이 "plan"이라는 키로 데이터를 줍니다.
       setMessages(prev => [...prev, { id: Date.now() + 2, role: 'assistant', text: "Your customized plan is ready! 👇", type: 'plan-result' }]);
       
-      const firstDay = Object.keys(result.daily_plan)[0];
+      const firstDay = Object.keys(result.plan)[0];
       if (hotel.location) {
         updateRouteWithShield(
           { lat: hotel.location.latitude, lng: hotel.location.longitude }, 
-          result.daily_plan[firstDay]
+          result.plan[firstDay]
         );
       }
     }
   } catch (error) {
+    // 🔴 3. [실패] 어떤 에러인지 텍스트로 뽑아서 실패 이벤트 전송!
+    const errorMsg = error instanceof Error ? error.message : "Unknown Error";
+    const durationMs = Date.now() - startTime;
+
+    trackEvent('plan_generation_failed', { 
+      destination: destination,
+      error_msg: errorMsg,
+      time_until_failure_ms: durationMs
+    });
+
     logError(error);
-    alert("An error occurred while creating the schedule. Partner!");
+    alert("An error occurred while creating the schedule. Please try again!");
   } finally {
-    setIsLoading(false); // 🟢 [추가] 성공하든 실패하든 로딩 종료!
+    setIsLoading(false);
   }
 };
 
@@ -415,7 +495,7 @@ type: 'text'
     <Map
   defaultCenter={cityAnchor}
   defaultZoom={13}
-  mapId="YOUR_MAP_ID" // AdvancedMarker를 쓰려면 반드시 유효한 Map ID가 필요합니다.
+  mapId="6af4c1235e0825fcd9c726f2" // AdvancedMarker를 쓰려면 반드시 유효한 Map ID가 필요합니다.
   options={{
     gestureHandling: "greedy",
     draggable: true,
@@ -481,38 +561,67 @@ type: 'text'
               {msg.text}
             </div>
 
-            {msg.type === 'date-selector' && (
-        <div className="w-full max-w-sm mt-2 p-4 bg-white rounded-2xl shadow-xl border border-blue-100 animate-slide-up">
-          <h5 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-            📅 Please select your travel dates
-          </h5>
-          
-          {/* 파트너가 준비한 날짜 선택 UI가 들어갈 자리 */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <input 
-                type="date" 
-                min={today}
-                onChange={(e) => setDates(prev => ({ ...prev, start: e.target.value }))}
-                className="p-2 border rounded-lg text-sm"
-              />
-              <input 
-                type="date" 
-                min={dates.start || today}
-                onChange={(e) => setDates(prev => ({ ...prev, end: e.target.value }))}
-                className="p-2 border rounded-lg text-sm"
-              />
-            </div>
-            
-            <button 
-              onClick={handleDateTravelerSubmit}
-              className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all"
-            >
-              Date Confirmed
-            </button>
-          </div>
-        </div>
-      )}
+           {msg.type === 'date-selector' && (
+              <div className="w-full max-w-sm mt-2 p-4 bg-white rounded-2xl shadow-xl border border-blue-100 animate-slide-up">
+                <h5 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                  📅 Travel dates & Guests
+                </h5>
+                
+                <div className="space-y-4">
+                  {/* 1. 날짜 선택 */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <input 
+                      type="date" min={today}
+                      onChange={(e) => setDates(prev => ({ ...prev, start: e.target.value }))}
+                      className="p-2 border border-gray-200 rounded-lg text-sm text-gray-700 outline-none focus:border-teal-500"
+                    />
+                    <input 
+                      type="date" min={dates.start || today}
+                      onChange={(e) => setDates(prev => ({ ...prev, end: e.target.value }))}
+                      className="p-2 border border-gray-200 rounded-lg text-sm text-gray-700 outline-none focus:border-teal-500"
+                    />
+                  </div>
+                  
+                  {/* 2. 인원 및 객실 선택 */}
+                  <div className="space-y-3 border-t border-gray-100 pt-3">
+                    {/* 성인 */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-gray-700">Adults</span>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setTravelers(p => ({...p, adults: Math.max(1, p.adults - 1)}))} className="w-7 h-7 bg-gray-100 rounded-full font-bold text-gray-600 hover:bg-gray-200 transition-colors">-</button>
+                        <span className="w-4 text-center text-sm font-bold text-gray-800">{travelers.adults}</span>
+                        <button onClick={() => setTravelers(p => ({...p, adults: p.adults + 1}))} className="w-7 h-7 bg-gray-100 rounded-full font-bold text-gray-600 hover:bg-gray-200 transition-colors">+</button>
+                      </div>
+                    </div>
+                    {/* 아이 */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-gray-700">Children</span>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setTravelers(p => ({...p, children: Math.max(0, p.children - 1)}))} className="w-7 h-7 bg-gray-100 rounded-full font-bold text-gray-600 hover:bg-gray-200 transition-colors">-</button>
+                        <span className="w-4 text-center text-sm font-bold text-gray-800">{travelers.children}</span>
+                        <button onClick={() => setTravelers(p => ({...p, children: p.children + 1}))} className="w-7 h-7 bg-gray-100 rounded-full font-bold text-gray-600 hover:bg-gray-200 transition-colors">+</button>
+                      </div>
+                    </div>
+                    {/* 방 개수 */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-bold text-gray-700">Rooms</span>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setBudgetInfo(p => ({...p, rooms: Math.max(1, p.rooms - 1)}))} className="w-7 h-7 bg-teal-50 rounded-full font-bold text-teal-600 hover:bg-teal-100 transition-colors">-</button>
+                        <span className="w-4 text-center text-sm font-bold text-gray-800">{budgetInfo.rooms}</span>
+                        <button onClick={() => setBudgetInfo(p => ({...p, rooms: p.rooms + 1}))} className="w-7 h-7 bg-teal-50 rounded-full font-bold text-teal-600 hover:bg-teal-100 transition-colors">+</button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <button 
+                    onClick={handleDateTravelerSubmit}
+                    className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 transition-all shadow-sm"
+                  >
+                    Confirm Details
+                  </button>
+                </div>
+              </div>
+            )}
       {msg.type === 'interest-selector' && (
   <div className="w-full max-w-sm mt-3 p-4 bg-white rounded-2xl shadow-md border">
     <p className="text-[11px] text-blue-500 font-bold mb-2">Please select up to 3 interests({tempInterests.length}/3)</p>
@@ -624,10 +733,18 @@ type: 'text'
               {hotel.name}
             </h4>
             
+            <div className="flex flex-wrap gap-1 mt-1.5 mb-1">
+              {hotel.summary_tags?.map((tag: string, idx: number) => (
+                <span key={idx} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[10px] font-bold border border-blue-100">
+                  {tag}
+                </span>
+              ))}
+            </div>
+            
             <div className="flex items-center gap-2 mt-1.5">
               <span className="text-xs text-gray-500 font-medium">⭐️ {hotel.rating}</span>
               <span className="text-gray-300">|</span>
-              <span className="text-xs text-gray-500 font-medium">💰 ${hotel.price_Per_Night}/night</span>
+              <span className="text-xs text-gray-500 font-medium">💰 ${hotel.pricePerNight}/night</span>
               
               {/* ✅ 구글 맵 링크 추가 */}
               {hotel.google_map_url && (

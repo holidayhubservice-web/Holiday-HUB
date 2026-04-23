@@ -13,7 +13,7 @@ export interface HotelEntity {
     latitude: number;
     longitude: number;
   };
-  price_Per_Night: number;
+  pricePerNight: number;
   rating: number;
   image_url?: string;
   google_map_url?: string;
