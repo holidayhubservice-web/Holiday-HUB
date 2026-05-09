@@ -1,4 +1,39 @@
+import logging
+import random
+import urllib.parse
+import config
+
+
+
+def _generate_affiliate_link(hotel_name, destination):
+    if not hotel_name:
+        return "#"
+
+    # ✅ 검색어만 깔끔하게 인코딩!
+    search_query = urllib.parse.quote(f"{hotel_name} {destination}")
+    booking_url = f"https://www.booking.com/searchresults.html?ss={search_query}"
+
+    tp_marker = "724242"
+    sub_id = "v1_ai_rec"
+
+    return (
+        f"https://tp.media/r?"
+        f"marker={tp_marker}"
+        f"&p=4142"
+        f"&u={booking_url}"
+        f"&sub_id={sub_id}"
+    )
+
+
 def find_hotels_logic(data):
+    from app import (
+        _get_city_center,
+        _get_anchor_points,
+        _make_api_request,
+        PLACES_API_URL_TEXT,
+        _estimate_price_from_level,
+        _generate_hotel_summary_tags
+    )
     logging.info("🏨 Finding Hotels (Fixed Body Error)...")
     dest = data.get('destination')
     interests = data.get('interests', [])
@@ -81,8 +116,11 @@ def find_hotels_logic(data):
                 "location": p.get('location'),
                 "image_url": img,
                 "google_map_url": f"https://www.google.com/maps/search/?api=1&query={enc_name}&query_place_id={p['id']}",
-                "summary_tags": _generate_hotel_summary_tags(p)
+                "summary_tags": _generate_hotel_summary_tags(p),
+                "affiliate_link": _generate_affiliate_link(hotel_name, dest)
             }
+            print(f"🔥 [DEBUG] 호텔 이름: {hotel_name}", flush=True)
+            print(f"🔥 [DEBUG] 생성된 제휴 링크: {hotel['affiliate_link']}", flush=True)
             
             output.append(hotel)
             seen_ids.add(p['id'])

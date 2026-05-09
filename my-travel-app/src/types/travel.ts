@@ -21,6 +21,7 @@ export interface HotelEntity {
   priceLevel?: string; // 추가됨
   summary_tags?: string[]; // 추가됨
   final_score?: number; // 추가됨
+  affiliate_link?: string;
 }
 
 export interface TripBudget {

@@ -842,13 +842,70 @@ type: 'text'
     </div>
   ))}
 </ReactSortable>
-              </div>
-            )}
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </main>
-    </div>
+
+{/* 🚀 [추가] Itinerary-to-Booking: 최종 예약 유도 CTA */}
+              {/* ========================================== */}
+              {selectedHotel && (
+                <div className="mt-8 p-6 bg-gradient-to-br from-teal-50 to-blue-50 rounded-2xl border border-teal-100 shadow-sm animate-fade-in">
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                    
+                    {/* 1. 요약 텍스트 */}
+                    <div className="flex-1">
+                      <h3 className="text-lg font-black text-gray-800 mb-2">
+                        Ready to make it real? ✈️
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-3">
+                        You selected <strong className="text-teal-700">{selectedHotel.name}</strong> as your basecamp. 
+                        Lock in this perfectly optimized itinerary at the best price verified by AI.
+                      </p>
+                      
+                      {/* 호텔 신뢰 태그 다시 한번 리마인드 */}
+                      <div className="flex flex-wrap gap-1">
+                        {selectedHotel.summary_tags?.slice(0, 3).map((tag: string, idx: number) => (
+                          <span key={idx} className="px-2 py-0.5 bg-white text-teal-700 rounded-md text-[10px] font-bold border border-teal-100">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 2. 예약 버튼 (Travelpayouts 딥링크 연동) */}
+                    <div className="w-full md:w-auto flex flex-col items-center">
+                      <a 
+                        href={selectedHotel.affiliate_link || "#"} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          // 📊 GA4 클릭 추적
+                          if (typeof window !== 'undefined' && window.gtag) {
+                            window.gtag('event', 'hotel_booking_click', {
+                              hotel_name: selectedHotel.name
+                            });
+                          }
+                        }}
+                        className="block w-full px-8 py-4 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-md transition-transform transform hover:scale-105 text-center"
+                      >
+                        Check Live Price & Book
+                      </a>
+                      <p className="text-[10px] text-gray-400 text-center mt-2">
+                        *We may earn a commission from our affiliate partners.
+                      </p>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+              {/* 👆👆👆 여기까지 입니다! 👆👆👆 */}
+
+            </div>
+          )}
+        </div>
+      ))}
+      <div ref={messagesEndRef} />
+    </main>
+</div>
+    
+    
 
 <footer className="bg-white p-3 border-t border-gray-100 sticky bottom-0 z-20">
   {(currentStep === 'destination' || currentStep === 'must-visit'|| currentStep === 'dates') ? (

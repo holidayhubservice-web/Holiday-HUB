@@ -12,6 +12,14 @@ from flask_cors import CORS
 import config
 import collections
 import random
+import sys
+import os
+
+# 🌉 [다리 연결] app.py가 'my-travel-app' 폴더 안쪽을 들여다볼 수 있게 길을 뚫어줍니다.
+sys.path.append(os.path.join(os.path.dirname(__file__), 'my-travel-app'))
+
+# 🚀 이제 정상적으로 신형 엔진을 불러올 수 있습니다!
+from logic.hotel_engine import find_hotels_logic
 
 # ==========================================
 # 1. 앱 설정 (App Config)
@@ -181,6 +189,8 @@ def _get_city_center(destination_text):
     if 'tokyo' in text: return {'latitude': 35.6762, 'longitude': 139.6503}
     if 'adelaide' in text: return {'latitude': -34.9285, 'longitude': 138.6007}
     return {'latitude': 37.5665, 'longitude': 126.9780}
+
+
 
 def _get_directions(origin, destination, mode='driving'):
     """[복구] 실제 구글 경로 API 호출"""
@@ -412,7 +422,7 @@ def _estimate_price_from_level(price_level):
     variance = int(base_price * 0.2)
     return base_price + random.randint(-variance, variance)
 
-def find_hotels_logic(data):
+
     logging.info("🏨 Finding Hotels (Fixed Body Error)...")
     dest = data.get('destination')
     interests = data.get('interests', [])
@@ -497,6 +507,7 @@ def find_hotels_logic(data):
                 "image_url": img,
                 "google_map_url": f"https://www.google.com/maps/search/?api=1&query={enc_name}&query_place_id={p['id']}",
                 "summary_tags": _generate_hotel_summary_tags(p)
+                
             }
             
             output.append(hotel)
@@ -593,7 +604,7 @@ def generate_plan_logic(data):
         target_places_count = (duration * stops_per_day) + 5 
 
         interests_key = ",".join(interests)
-        cache_key = f"{dest}_{interests_key}"
+        cache_key = f"{dest}_{interests_key}_v2"
         
         global SHADOW_CACHE
         if cache_key in SHADOW_CACHE and SHADOW_CACHE[cache_key]:
@@ -854,6 +865,7 @@ def place_details_proxy():
     return jsonify({"status": "error"}), 500
 
 if __name__ == '__main__':
+    print("🚀 [SYSTEM] 파트너가 수정한 최신 파일이 실행되었습니다!!!")
     app.run(host="0.0.0.0", port=5001, debug=True)
 
 
@@ -861,7 +873,12 @@ SHADOW_CACHE = {}
 
 @app.route('/prefetch-places', methods=['POST', 'OPTIONS'])
 def prefetch_places_route():
-  
+    if request.method == 'OPTIONS':
+        response = jsonify({})
+        response.headers.add('Access-Control-Allow-Origin', '*') # 모든 도메인 허용 (또는 'http://localhost:5173')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, X-Goog-Api-Key, X-Goog-FieldMask')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        return response, 200
     data = request.get_json()
     dest = data.get('destination')
     interests = data.get('interests', [])
@@ -871,7 +888,7 @@ def prefetch_places_route():
     # 🧠 [Adaptive Logic] 유저의 일정 길이에 맞춰 목표치 계산 (불필요한 API 낭비 방지)
     stops_per_day = 5 # 백그라운드 수집용 넉넉한 기본값
     target_places_count = (duration * stops_per_day) + 5
-    cache_key = f"{dest}_{interests_key}"
+    cache_key = f"{dest}_{interests_key}_v2"
     
     # 이미 충분히 수집했다면 조용히 종료 (비용 세이브)
     if cache_key in SHADOW_CACHE and len(SHADOW_CACHE[cache_key]) >= target_places_count:
