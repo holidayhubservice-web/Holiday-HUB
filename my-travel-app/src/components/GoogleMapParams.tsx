@@ -37,7 +37,7 @@ export default function TripRouteLayer({ hotelLocation, activities }: Props) {
     const lineSymbol = {
       path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
       scale: 3,
-      strokeColor: "#FF5733", // 선 색상과 맞춤
+      strokeColor: "#0D9488", // 선 색상과 맞춤
     };
 
     // 4. 폴리라인(화살표 선) 생성
@@ -49,7 +49,7 @@ export default function TripRouteLayer({ hotelLocation, activities }: Props) {
         repeat: '100px' // 100px마다 화살표 표시
       }],
       map: map,
-      strokeColor: "#FF5733", // 주황색 계열로 가시성 확보
+      strokeColor: "#0D9488", // 주황색 계열로 가시성 확보
       strokeOpacity: 0.8,
       strokeWeight: 4,
       geodesic: true // 지구 곡률 반영 (더 자연스러운 선)

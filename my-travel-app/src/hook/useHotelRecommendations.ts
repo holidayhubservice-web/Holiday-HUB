@@ -60,7 +60,7 @@ export const useHotelRecommendations = (tripInfo: SearchParams | null) => {
         setData({ recommendedHotels: finalResult.recommendedHotels });
         // 4. 데이터 저장
         console.log("✅ React: Received hotels from Python:", result.hotels);
-        setData({ recommendedHotels: result.hotels });
+        
 
       } catch (err) {
         console.error("❌ React Error:", err);

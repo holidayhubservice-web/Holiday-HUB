@@ -27,7 +27,6 @@ console.log("🛠️ ENV Key Check:", GOOGLE_MAPS_API_KEY ? "Loaded" : "Not Foun
 declare var google: any; // 전역 google 객체 선언
 
 function App() {
-  console.log("DEBUG 2 (Variable Check):", GOOGLE_MAPS_API_KEY);
   // --- 1. 상태 관리 및 참조(Ref) 선언 ---
   const [messages, setMessages] = useState<Message[]>([]);
   const routeCache = useRef<Record<string, any>>({}); // [아키텍처] 루트 캐싱 레이어
@@ -106,6 +105,31 @@ function App() {
     return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)));
   })();
 
+  useEffect(() => {
+    const savedPlan = localStorage.getItem('holidayHub_currentPlan');
+    const savedDestination = localStorage.getItem('holidayHub_destination');
+    
+    if (savedPlan) {
+      setPlanData(JSON.parse(savedPlan)); // 💡 변수명을 파트너의 코드에 맞게 planData로 수정했습니다!
+    }
+    if (savedDestination) {
+      setDestination(savedDestination); 
+    }
+  }, []);
+
+  // 2. 여행 계획(planData)이 변경될 때마다 자동 저장합니다.
+  useEffect(() => {
+    if (planData) {
+      localStorage.setItem('holidayHub_currentPlan', JSON.stringify(planData));
+    }
+  }, [planData]);
+
+  // 3. 목적지(destination)가 변경될 때마다 자동 저장합니다.
+  useEffect(() => {
+    if (destination) {
+      localStorage.setItem('holidayHub_destination', destination);
+    }
+  }, [destination]);
   
   // --- 4. 이벤트 핸들러 ---
   useEffect(() => {
@@ -139,19 +163,6 @@ function App() {
   }
 }, [hotelData, currentStep]);
 
-useEffect(() => {
-    if (hotelData && hotelData.recommendedHotels.length > 0 && currentStep === 'hotels') {
-      setMessages(prev => {
-        if (prev[prev.length - 1]?.type === 'hotel-list') return prev;
-        return [...prev, {
-          id: Date.now(),
-          role: 'assistant',
-          text: "Here are my top recommendations based on your budget:",
-          type: 'hotel-list'
-        }];
-      });
-    }
-  }, [hotelData, currentStep]);
 
   // =========================================================
   // 🚀 [신규 추가] 그림자 수집 (Shadow Fetching) 트리거
@@ -825,10 +836,12 @@ type: 'text'
             href={item.details.google_map_url} 
             target="_blank" 
             rel="noreferrer"
-            className="absolute right-4 top-4 z-10 bg-white/80 backdrop-blur-sm p-1.5 rounded-full shadow-sm hover:bg-blue-50 transition-colors"
+            // 🚀 [UI 업그레이드] 텍스트가 포함된 둥근 버튼으로 변경하여 클릭률(CTR)과 편의성을 높였습니다!
+            className="absolute right-3 top-3 z-10 bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm border border-gray-100 hover:bg-teal-50 hover:border-teal-200 transition-all flex items-center gap-1.5 group-hover:-translate-y-0.5"
             title="Open in Google Maps"
           >
             <span className="text-xs">📍</span>
+            <span className="text-[10px] font-black text-gray-700 hover:text-teal-700">View Map</span>
           </a>
         )}
 
@@ -845,7 +858,7 @@ type: 'text'
 
 {/* 🚀 [추가] Itinerary-to-Booking: 최종 예약 유도 CTA */}
               {/* ========================================== */}
-              {selectedHotel && (
+              {false && selectedHotel && (
                 <div className="mt-8 p-6 bg-gradient-to-br from-teal-50 to-blue-50 rounded-2xl border border-teal-100 shadow-sm animate-fade-in">
                   <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                     

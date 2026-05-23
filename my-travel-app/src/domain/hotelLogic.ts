@@ -63,6 +63,19 @@ export const getRecommendedHotels = async (
   // 3. 앵커(중심지) 설정
   const anchor = await determineSearchAnchor(interestLocations);
 
+  const uniqueHotels: HotelEntity[] = [];
+  const seenNames = new Set<string>();
+
+  for (const hotel of allHotels) {
+    // 공백을 없애고 소문자로 만들어 "Hilton Adelaide"와 "HiltonAdelaide"를 같은 것으로 취급
+    const normalizedName = hotel.name.replace(/\s+/g, '').toLowerCase();
+    
+    if (!seenNames.has(normalizedName)) {
+      seenNames.add(normalizedName);
+      uniqueHotels.push(hotel);
+    }
+  }
+
   // 4. 모든 호텔에 '위치 점수' 부여 및 가공
   // map 결과를 ScoredHotel[]로 명시
   const scoredHotels: ScoredHotel[] = allHotels.map((h) => ({

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AdvancedMarker, Pin } from '@vis.gl/react-google-maps';
 import type { HotelEntity } from '../types/travel';
 import TripRouteLayer from './GoogleMapParams'; 
@@ -99,3 +99,4 @@ if (!dailyPlan || !Array.isArray(dailyPlan) || dailyPlan.length === 0) {
 };
 
 export default PlanningLayer;
+
