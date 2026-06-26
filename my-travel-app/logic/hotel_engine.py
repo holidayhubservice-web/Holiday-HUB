@@ -26,26 +26,19 @@ def _estimate_price_from_level(price_level):
     variance = int(base_price * 0.2)
     return base_price + random.randint(-variance, variance)
 
-
 def find_hotels_logic(data):
-    # (주의: app.py의 함수들을 가져옵니다. Circular Import 조심!)
-    from app import (
-        _get_city_center,
-        _get_anchor_points,
-        _make_api_request,
-        PLACES_API_URL_TEXT,
-        _generate_hotel_summary_tags,
-        calculate_distance
-    )
+    from app import ( _get_city_center, _get_anchor_points, _make_api_request, PLACES_API_URL_TEXT, _generate_hotel_summary_tags, calculate_distance )
     
     logging.info("🏨 Finding Hotels (Clean Architecture Mode)...")
     dest = data.get('destination')
     interests = data.get('interests', [])
-    
     total_budget = float(data.get('budget', 2000))
     duration = int(data.get('duration', 3))
-    target_price = (total_budget * 0.25) / max(1, duration - 1)
     
+    # 🚀 [신규 추가] 프론트엔드에서 보낸 선호 호텔 텍스트 받기
+    preferred_hotel = data.get('preferredHotel', '').strip()
+    
+    target_price = (total_budget * 0.25) / max(1, duration - 1)
     center = _get_city_center(dest)
     
     headers = { 
@@ -54,20 +47,20 @@ def find_hotels_logic(data):
         "X-Goog-FieldMask": "places.id,places.displayName,places.rating,places.priceLevel,places.location,places.types,places.photos" 
     }
     
-    # 예산에 맞춘 똑똑한 쿼리 분기
-    if target_price < 80:
-        query_term = "best hostels and cheap guesthouses"
-    elif target_price < 150:
-        query_term = "affordable 3-star hotels and serviced apartments"
-    elif target_price < 300:
-        query_term = "highly rated 4-star hotels"
+    # 🚀 [로직 변경] 유저가 선호 브랜드를 적었으면 무조건 그걸 1순위 검색어로 씁니다!
+    if preferred_hotel:
+        query_term = f"best {preferred_hotel} hotels and resorts"
+        logging.info(f"🎯 [Brand Search] Target: {query_term} in {dest}")
     else:
-        query_term = "best luxury 5-star hotels and resorts"
+        # 기존 예산별 검색 로직 유지
+        if target_price < 80: query_term = "best hostels and cheap guesthouses"
+        elif target_price < 150: query_term = "affordable 3-star hotels and serviced apartments"
+        elif target_price < 300: query_term = "highly rated 4-star hotels"
+        else: query_term = "best luxury 5-star hotels and resorts"
     
     body = { 
         "textQuery": f"{query_term} in {dest}",
         "maxResultCount": 20, 
-        # 🚨 [필수 수정] 250km 밖으로 안 튕겨 나가게 '제한(Restriction)'으로 바리케이드를 칩니다! 반경 15km!
         "locationBias": { "circle": { "center": center, "radius": 15000.0 } } 
     }
     

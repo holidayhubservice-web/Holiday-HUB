@@ -37,9 +37,10 @@ export const getRecommendedHotels = async (
     startDate: Date;
     endDate: Date;
     interestLocations: GeoPoint[];
+    preferredHotel?: string; // 🚀 추가!
   }
-): Promise<RecommendationResult> => {
-  const { totalBudget, startDate, endDate, interestLocations } = params;
+): Promise<RecommendationResult & { warningMessage?: string }> => {
+  const { totalBudget, startDate, endDate, interestLocations, preferredHotel } = params;
 
   // 1. 당일치기 예외 처리 (Early Return)
   if (isDayTrip(startDate, endDate)) {
@@ -87,15 +88,29 @@ export const getRecommendedHotels = async (
   }));
 
   // 5. 트레이드오프 로직: 예산 vs 위치
-  const baseMax = targetPrice * 1.1; // +10%
+  
   const extendedMax = targetPrice * 1.2; // +20% (가심비 구간)
+  const baseMax = targetPrice * 1.1; // 기본 +10%
 
-  // 후보군 필터링
   const candidates = scoredHotels.filter((h) => {
-    // A: 예산보다 쌈 (OK)
+    let currentExtendedMax = targetPrice * 1.2; // 기본 가심비 +20%
+
+    // 호텔 이름에 유저가 적은 브랜드(예: Accor)가 포함되어 있다면 마지노선 대폭 상향!
+    const isPreferred = preferredHotel && h.name.toLowerCase().includes(preferredHotel.toLowerCase());
+    
+    if (isPreferred) {
+      currentExtendedMax = (targetPrice * 1.1) + 50; // 🚀 공식: (기본 예산 * 1.1) + $50
+      h.summary_tags = h.summary_tags ?? [];
+      h.summary_tags.unshift("⭐ Preferred Brand"); // UI에 띄울 태그 추가
+    }
+
+    // A: 기본 예산보다 쌈 (OK)
     if (h.pricePerNight <= targetPrice) return true;
+    // B: 10% 이내 초과 (OK)
     if (h.pricePerNight <= baseMax) return true;
-    if (h.pricePerNight <= extendedMax && h.score >= 80) return true;
+    // C: 점수가 높거나 선호 브랜드라서 확장된 마지노선 이내 (OK)
+    if (h.pricePerNight <= currentExtendedMax && (h.score >= 80 || isPreferred)) return true;
+    
     return false;
   });
 
@@ -141,11 +156,22 @@ export const getRecommendedHotels = async (
     finalSelection.push(...leftovers.slice(0, needed));
   }
 
+ let warningMessage = undefined;
+  if (preferredHotel) {
+    const hasPreferredInFinal = finalSelection.some(h => 
+      h.name.toLowerCase().includes(preferredHotel.toLowerCase())
+    );
+    if (!hasPreferredInFinal) {
+      warningMessage = `The '${preferredHotel}' hotels exceeded your max flexible budget ($${Math.floor((targetPrice * 1.1) + 50)}/night). Instead, we found top-rated alternatives! 🔒`;
+    }
+  }
+
   return {
     isDayTrip: false,
     searchAnchor: anchor,
     budgetPlan,
-    recommendedHotels: finalSelection
+    recommendedHotels: finalSelection,
+    warningMessage // 🚀 결과물에 꼬리표 붙여서 내보내기
   };
 };
 export const fetchHotelsFromApi = async (params: any) => {

@@ -8,7 +8,7 @@ interface BackendResponse {
 }
 
 export const useHotelRecommendations = (tripInfo: SearchParams | null) => {
-  const [data, setData] = useState<{ recommendedHotels: HotelEntity[] } | null>(null);
+  const [data, setData] = useState<{ recommendedHotels: HotelEntity[]; warningMessage?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -53,6 +53,14 @@ export const useHotelRecommendations = (tripInfo: SearchParams | null) => {
           startDate: new Date(tripInfo.startDate),
           endDate: new Date(tripInfo.endDate),
           interestLocations: [] // 현재는 비어있지만 나중에 확장 가능
+        });
+
+      
+
+        // 🚀 warningMessage 상태 업데이트 로직 추가 (나중에 UI에 띄우기 위함)
+        setData({ 
+          recommendedHotels: finalResult.recommendedHotels,
+          warningMessage: finalResult.warningMessage 
         });
 
         

@@ -9,7 +9,12 @@ import PlanningLayer from './components/PlanningLayer.tsx';
 import { ActivityCard } from './components/ActivityCard.tsx';
 import type { TravelIntensity } from './utils/travelLogic';
 import { trackEvent } from './services/analytics';
+import { useAuth } from './hook/useAuth';
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { db } from './firebaseConfig';
+import SplitHomepage from './components/SplitHomepage';
 // 메시지 타입 정의
+
 interface Message {
   id: number;
   role: 'assistant' | 'user';
@@ -28,6 +33,7 @@ declare var google: any; // 전역 google 객체 선언
 
 function App() {
   // --- 1. 상태 관리 및 참조(Ref) 선언 ---
+  const [viewMode, setViewMode] = useState<'intro' | 'main' | 'guess'>('intro');
   const [messages, setMessages] = useState<Message[]>([]);
   const routeCache = useRef<Record<string, any>>({}); // [아키텍처] 루트 캐싱 레이어
   const directionsServiceRef = useRef<any>(null);
@@ -84,6 +90,7 @@ function App() {
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [selectedIntensity, setSelectedIntensity] = useState<TravelIntensity | null>(null);
   const [budgetInfo, setBudgetInfo] = useState({ totalBudget: 2000, rooms: 1 });
+  const [preferredHotel, setPreferredHotel] = useState<string>('');
   const [mustVisitPlaces, setMustVisitPlaces] = useState<{ name: string, day: number }[]>([]);
   const [tempMustVisitName, setTempMustVisitName] = useState<string | null>(null);
   const [isAskDayMode, setIsAskDayMode] = useState(false);
@@ -98,6 +105,11 @@ function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const today = new Date().toISOString().split('T')[0];
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+  const [isMyPageOpen, setIsMyPageOpen] = useState(false);
+  const { user, loginWithGoogle, logout } = useAuth();
+  const [myPageMode, setMyPageMode] = useState<'profile' | 'list'>('profile');
+  const [savedPlans, setSavedPlans] = useState<any[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const duration = (() => {
     if (!dates.start || !dates.end) return 3;
     const start = new Date(dates.start);
@@ -131,11 +143,16 @@ function App() {
     }
   }, [destination]);
   
+  
   // --- 4. 이벤트 핸들러 ---
   useEffect(() => {
-    setTimeout(() => {
-      setMessages([{ id: 1, role: 'assistant', text: "Hello! 👋 I'm Holiday Hub.\nWhere would you like to travel?", type: 'text' }]);
-    }, 1000);
+    // 🚀 [수정] 주소창에 공유 링크(?plan=)가 없을 때만 1초 뒤에 기본 인사말을 띄웁니다.
+    const urlParams = new URLSearchParams(window.location.search);
+    if (!urlParams.get('plan')) {
+      setTimeout(() => {
+        setMessages([{ id: 1, role: 'assistant', text: "Hello! 👋 I'm Holiday Hub.\nWhere would you like to travel?", type: 'text' }]);
+      }, 1000);
+    }
   }, []);
 
   useEffect(() => {
@@ -249,7 +266,8 @@ function App() {
         totalBudget: budgetInfo.totalBudget,
         interests: selectedInterests,
         travelers,
-        rooms: budgetInfo.rooms
+        rooms: budgetInfo.rooms,
+        preferredHotel: preferredHotel
       };
 
       try {
@@ -365,6 +383,206 @@ const handleHotelSelect = async (hotel: HotelEntity) => {
   }
 };
 
+const [isSaving, setIsSaving] = useState(false);
+
+  const handleSavePlan = async () => {
+    if (!user) {
+      alert("Please log in to save your plan! 🔒");
+      setIsMyPageOpen(true);
+      return;
+    }
+    if (!planData || !selectedHotel) {
+      alert("There is no plan to save yet.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // DB에 들어갈 캡슐(문서) 포장
+      const planToSave = {
+        userId: user.uid,
+        destination: destination,
+        dates: dates,
+        hotel: selectedHotel,
+        dailyPlan: planData,
+        createdAt: serverTimestamp(),
+      };
+
+      // 'saved_plans'라는 이름의 컬렉션(폴더)에 문서 던져넣기!
+      await addDoc(collection(db, 'saved_plans'), planToSave);
+      
+      alert("Plan saved successfully! ✈️");
+    } catch (error) {
+      console.error("Error saving plan:", error);
+      alert("Failed to save the plan. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+const handleLoadPlans = async () => {
+    if (!user) return;
+    setMyPageMode('list'); // 모달창을 '리스트 모드'로 바꿉니다!
+    setIsLoadingPlans(true);
+    
+    try {
+      // "saved_plans 폴더에서, userId가 내 uid와 똑같은 것만 찾아라!"
+      const q = query(collection(db, 'saved_plans'), where("userId", "==", user.uid));
+      const querySnapshot = await getDocs(q);
+      
+      const plans = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // 최신순으로 정렬 (에러 방지를 위해 자바스크립트 단에서 정렬)
+      plans.sort((a: any, b: any) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      
+      setSavedPlans(plans);
+    } catch (error) {
+      console.error("Error loading plans:", error);
+      alert("Failed to load saved plans.");
+    } finally {
+      setIsLoadingPlans(false);
+    }
+  };
+
+  // 🚀 [신규 추가] 불러온 일정을 클릭했을 때 화면에 뿌려주는 함수
+  const handleSelectSavedPlan = (plan: any) => {
+    // 1. 기본 여행 데이터 복원
+    setDestination(plan.destination);
+    setDates(plan.dates);
+    setSelectedHotel(plan.hotel);
+    setPlanData(plan.dailyPlan);
+    
+    // 2. 📍 [핵심] 지도의 중심점을 숙소(Hotel) 좌표로 강제 고정하여 지도를 깨웁니다.
+    if (plan.hotel?.location) {
+      const coords = {
+        lat: plan.hotel.location.latitude || plan.hotel.location.lat,
+        lng: plan.hotel.location.longitude || plan.hotel.location.lng
+      };
+      setCityAnchor(coords);
+    }
+
+    // 3. 💬 [핵심] 대화창 리스트에 "일정 결과 카드"를 보여주라는 마커 메시지를 주입합니다.
+    // 우리 UI는 이 메시지 타입이 'plan-result'여야 타임라인을 그립니다!
+    setMessages([
+      { id: 1, role: 'assistant', text: "Hello! 👋 I'm Holiday Hub.\nWhere would you like to travel?", type: 'text' },
+      { id: Date.now(), role: 'assistant', text: `Successfully restored your trip to ${plan.destination}! ✨`, type: 'plan-result' }
+    ]);
+
+    // 4. 🧭 [핵심] 현재 단계를 'planning' 또는 'result'로 전환하여 상단 지도가 35vh 크기로 나타나게 만듭니다.
+    setCurrentStep('planning');
+    setCurrentDay('Day 1'); // 항상 1일차부터 보여주도록 초기화
+
+    // 5. 🚗 [핵심] 구글 맵 위에 1일차 경로선(Polyline)을 그리도록 비용 방어막 함수를 호출합니다.
+    const firstDayKey = Object.keys(plan.dailyPlan)[0] || "Day 1";
+    if (plan.hotel?.location && plan.dailyPlan[firstDayKey]) {
+      // 리액트가 상태를 반영할 아주 잠깐의 시간(100ms)을 준 뒤 경로를 그립니다.
+      setTimeout(() => {
+        updateRouteWithShield(
+          { lat: plan.hotel.location.latitude, lng: plan.hotel.location.longitude }, 
+          plan.dailyPlan[firstDayKey]
+        );
+      }, 100);
+    }
+    
+    // 6. 마이페이지 팝업창을 닫고 프로필 모드로 리셋
+    setIsMyPageOpen(false);
+    setMyPageMode('profile');
+  };
+
+const [isSharing, setIsSharing] = useState(false);
+const [isSharedLoading, setIsSharedLoading] = useState(false);
+
+  // 1. 현재 일정을 공용 창고에 저장하고 복사 가능한 URL을 생성하는 함수
+  const handleSharePlan = async () => {
+    if (!planData || !selectedHotel) {
+      alert("Link for share is not ready yet.");
+      return;
+    }
+
+    setIsSharing(true);
+    try {
+      // 누구나 읽을 수 있는 공용 스냅샷 포장
+      const planToShare = {
+        destination,
+        dates,
+        hotel: selectedHotel,
+        dailyPlan: planData,
+        sharedAt: serverTimestamp(),
+      };
+
+      // 'public_plans' 컬렉션에 임시 문서 생성
+      const docRef = await addDoc(collection(db, 'public_plans'), planToShare);
+      
+      // 구시대 방식(execCommand) 대신 최신 웹 표준 Clipboard API 사용!
+      const shareUrl = `${window.location.origin}${window.location.pathname}?plan=${docRef.id}`;
+      await navigator.clipboard.writeText(shareUrl);
+      
+      alert("Shared successfully! The link has been copied to your clipboard.");
+    } catch (error) {
+      console.error("Error sharing plan:", error);
+      alert("Failed to create share link.");
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  // 2. 누군가 공유 링크(?plan=ID)를 타고 들어왔을 때 데이터를 복원하는 함수
+  const loadSharedPlan = async (planId: string) => {
+    setIsSharedLoading(true);
+    try {
+      // 런타임 최적화를 위해 필요한 도구만 동적 임포트 (Clean Architecture)
+      const { doc, getDoc } = await import('firebase/firestore');
+      const docRef = doc(db, 'public_plans', planId);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        alert("Expired or non-existent share link. 🧭");
+        return;
+      }
+
+      const plan = docSnap.data();
+      
+      // 상태 복원 톱니바퀴 가동
+      setDestination(plan.destination);
+      setDates(plan.dates);
+      setSelectedHotel(plan.hotel);
+      setPlanData(plan.dailyPlan);
+      setCurrentStep('planning');
+      setCurrentDay('Day 1');
+
+      setMessages([
+        { id: 1, role: 'assistant', text: `Shared ${plan.destination} trip plan loaded successfully! 🌍`, type: 'plan-result' }
+      ]);
+
+      if (plan.hotel?.location) {
+        const coords = {
+          lat: plan.hotel.location.latitude || plan.hotel.location.lat,
+          lng: plan.hotel.location.longitude || plan.hotel.location.lng
+        };
+        setCityAnchor(coords);
+        setTimeout(() => {
+          updateRouteWithShield(coords, plan.dailyPlan['Day 1'] || []);
+        }, 300);
+      }
+    } catch (error) {
+      console.error("Error loading shared plan:", error);
+      alert("Failed to load shared plan.");
+    } finally {
+      setIsSharedLoading(false);
+    }
+  };
+
+  useEffect(() => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sharedPlanId = urlParams.get('plan');
+      
+      // 조기 리턴(Early Return) 패턴으로 중첩 if 방지
+      if (!sharedPlanId) return; 
+      
+      loadSharedPlan(sharedPlanId);
+    }, []);
+ 
+
 const onListSorted = (dayKey: string, newOrderItems: any[]) => {
   setPlanData((prev: any) => ({ ...prev, [dayKey]: newOrderItems }));
   
@@ -475,6 +693,98 @@ type: 'text'
   // --- 5. UI 렌더링 ---
   return (
    <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
+
+      {viewMode === 'intro' ? (
+        <SplitHomepage 
+          onSelectBuild={() => {
+            // 오른쪽: 기존 대화형 목적지 검색으로 바로 이동!
+            setViewMode('main');
+          }}
+          onSelectGuess={() => {
+            // 왼쪽: 추후 만들 4단계 AI 영감 퀴즈 모드로 이동!
+            setViewMode('main'); // 임시로 main으로 보냄 (이후 업데이트)
+            // setCurrentStep('quiz-start'); // 나중에 이 주석을 풀고 연결합니다.
+          }}
+        />
+      ) : (
+        <>
+          {isMyPageOpen && user && (
+            <div 
+              className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in"
+              onClick={() => { setIsMyPageOpen(false); setMyPageMode('profile'); }}
+            >
+          <div 
+            className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 닫기 버튼 */}
+            <button onClick={() => { setIsMyPageOpen(false); setMyPageMode('profile'); }} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-2 z-10">
+              <i className="fas fa-times text-xl"></i>
+            </button>
+
+            {myPageMode === 'profile' ? (
+              // 👤 [모드 1] 프로필 화면
+              <div className="animate-fade-in">
+                <div className="flex flex-col items-center mb-6 mt-4">
+                  <img src={user.photoURL || ''} referrerPolicy="no-referrer" alt="Profile" className="w-20 h-20 rounded-full mb-3 shadow-md border-4 border-teal-50 bg-gray-100" />
+                  <p className="font-black text-xl text-gray-800">{user.displayName}</p>
+                  <p className="text-xs text-gray-500 mt-1">{user.email}</p>
+                </div>
+
+                <div className="space-y-3">
+                  {/* 💡 드디어 껍데기가 아닌 진짜 함수(handleLoadPlans)를 연결했습니다! */}
+                  <button onClick={handleLoadPlans} className="w-full py-3.5 bg-teal-50 text-teal-700 rounded-xl font-bold hover:bg-teal-100 transition-colors flex items-center justify-center gap-2">
+                    <i className="fas fa-map-marked-alt"></i> My Saved Plans
+                  </button>
+                  <button onClick={() => { logout(); setIsMyPageOpen(false); }} className="w-full py-3.5 bg-gray-50 text-gray-600 rounded-xl font-bold hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center gap-2">
+                    <i className="fas fa-sign-out-alt"></i> Sign Out
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // 📋 [모드 2] 저장된 리스트 화면
+              <div className="animate-fade-in flex flex-col h-[60vh] max-h-[500px]">
+                <div className="flex items-center mb-4">
+                  <button onClick={() => setMyPageMode('profile')} className="text-gray-400 hover:text-teal-600 mr-2">
+                    <i className="fas fa-chevron-left text-lg"></i>
+                  </button>
+                  <h3 className="font-black text-lg text-gray-800">My Saved Plans</h3>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                  {isLoadingPlans ? (
+                    <div className="text-center py-10 text-gray-400 font-medium">
+                      <i className="fas fa-spinner fa-spin text-2xl mb-2 text-teal-500"></i>
+                      <p>Loading your vault...</p>
+                    </div>
+                  ) : savedPlans.length === 0 ? (
+                    <div className="text-center py-10 text-gray-400 font-medium">
+                      <i className="fas fa-folder-open text-4xl mb-3 text-gray-300"></i>
+                      <p>No saved plans yet.</p>
+                    </div>
+                  ) : (
+                    savedPlans.map(plan => (
+                      <div 
+                        key={plan.id} 
+                        onClick={() => handleSelectSavedPlan(plan)}
+                        className="bg-gray-50 p-4 rounded-2xl border border-gray-100 hover:border-teal-300 hover:shadow-md transition-all cursor-pointer group"
+                      >
+                        <h4 className="font-bold text-gray-800 group-hover:text-teal-700 mb-1">{plan.destination}</h4>
+                        <p className="text-xs text-gray-500 mb-2">
+                          <i className="far fa-calendar-alt mr-1"></i> {plan.dates?.start || 'Unknown date'}
+                        </p>
+                        <span className="text-[10px] font-bold bg-white px-2 py-1 rounded-md text-teal-600 border border-teal-100 shadow-sm">
+                          🏨 {plan.hotel?.name || 'No Hotel'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
   <div className="h-screen flex flex-col bg-white overflow-hidden">
     {/* 1. 고정 헤더 */}
     <header className="bg-white px-4 py-3 border-b-2 border-teal-100 flex items-center justify-between z-50 relative">
@@ -492,9 +802,23 @@ type: 'text'
   </div>
 
   {/* 우측 Reset 버튼 (민트 컬러 적용) */}
+  <div className="flex items-center gap-4 z-10">
+          {user ? (
+            // 로그인 성공 시: 유저 프로필 사진이 뜹니다. 누르면 마이페이지 오픈!
+            <button onClick={() => setIsMyPageOpen(true)} className="hover:opacity-80 transition-opacity">
+              <img src={user.photoURL || ''} alt="Profile" className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-teal-200 shadow-sm" />
+            </button>
+          ) : (
+            // 로그아웃 상태: 구글 로그인 버튼이 뜹니다.
+            <button onClick={loginWithGoogle} className="text-sm font-bold text-teal-600 hover:text-teal-800 transition-colors flex items-center gap-1.5">
+              <i className="fab fa-google"></i> Login
+            </button>
+          )}
+  
   <button onClick={() => window.location.reload()} className="text-sm font-bold text-teal-600 hover:text-teal-800 z-10 transition-colors">
     Reset
   </button>
+  </div>
 </header>
 
     {/* 2. 본문 컨테이너 (지도 + 리스트) */}
@@ -689,6 +1013,24 @@ type: 'text'
     <h5 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
       💰 Budget of travel (per person)
     </h5>
+    <div className="mt-4 pb-4 border-b border-gray-100">
+      <p className="text-[11px] font-bold text-teal-700 mb-1">
+        🏨 Any specific hotel or brand? (Optional)
+      </p>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+        <input 
+          type="text" 
+          placeholder="e.g. Ibis, Marriott, Novotel..." 
+          value={preferredHotel}
+          onChange={(e) => setPreferredHotel(e.target.value)}
+          className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-teal-500 transition-colors"
+        />
+      </div>
+      <p className="text-[9px] text-gray-400 mt-1">
+        We'll try to find the same group so you don't miss out on points!
+      </p>
+    </div>
     
     <div className="py-6">
       {/* 1. 금액 표시 */}
@@ -856,25 +1198,28 @@ type: 'text'
   ))}
 </ReactSortable>
 
-{/* 🚀 [추가] Itinerary-to-Booking: 최종 예약 유도 CTA */}
+
               {/* ========================================== */}
-              {false && selectedHotel && (
+              {/* 🚀 [수정 완료] Itinerary-to-Booking: 최종 예약 및 저장 유도 CTA */}
+              {/* ========================================== */}
+              {/* 1. 맨 앞의 false && 를 지워서, 박스 전체가 화면에 보이게 살려냅니다! */}
+              {selectedHotel && (
                 <div className="mt-8 p-6 bg-gradient-to-br from-teal-50 to-blue-50 rounded-2xl border border-teal-100 shadow-sm animate-fade-in">
                   <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                     
-                    {/* 1. 요약 텍스트 */}
+                    {/* 왼쪽: 요약 텍스트 */}
                     <div className="flex-1">
                       <h3 className="text-lg font-black text-gray-800 mb-2">
                         Ready to make it real? ✈️
                       </h3>
                       <p className="text-sm text-gray-600 mb-3">
-                        You selected <strong className="text-teal-700">{selectedHotel.name}</strong> as your basecamp. 
+                        You selected <strong className="text-teal-700">{selectedHotel?.name}</strong> as your basecamp. 
                         Lock in this perfectly optimized itinerary at the best price verified by AI.
                       </p>
                       
-                      {/* 호텔 신뢰 태그 다시 한번 리마인드 */}
+                      {/* 호텔 신뢰 태그 리마인드 */}
                       <div className="flex flex-wrap gap-1">
-                        {selectedHotel.summary_tags?.slice(0, 3).map((tag: string, idx: number) => (
+                        {selectedHotel?.summary_tags?.slice(0, 3).map((tag: string, idx: number) => (
                           <span key={idx} className="px-2 py-0.5 bg-white text-teal-700 rounded-md text-[10px] font-bold border border-teal-100">
                             {tag}
                           </span>
@@ -882,33 +1227,47 @@ type: 'text'
                       </div>
                     </div>
 
-                    {/* 2. 예약 버튼 (Travelpayouts 딥링크 연동) */}
-                    <div className="w-full md:w-auto flex flex-col items-center">
-                      <a 
-                        href={selectedHotel.affiliate_link || "#"} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        onClick={() => {
-                          // 📊 GA4 클릭 추적
-                          if (typeof window !== 'undefined' && window.gtag) {
-                            window.gtag('event', 'hotel_booking_click', {
-                              hotel_name: selectedHotel.name
-                            });
-                          }
-                        }}
+                    {/* 오른쪽: 액션 버튼 영역 */}
+                    <div className="w-full md:w-auto flex flex-col items-center gap-3">
+                      
+                      {/* 🛑 2. 예약 버튼에만 투명 망토(false &&)를 씌워서 숨겨둡니다. (나중에 이것만 지우면 부활!) */}
+                      {false && (
+                        <a 
+                          href={selectedHotel?.affiliate_link || "#"} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          onClick={() => {
+                            if (typeof window !== 'undefined' && window.gtag) {
+                              window.gtag('event', 'hotel_booking_click', { hotel_name: selectedHotel?.name });
+                            }
+                          }}
+                          className="block w-full px-8 py-4 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-md transition-transform transform hover:scale-105 text-center"
+                        >
+                          Check Live Price & Book
+                        </a>
+                      )}
+
+                      {/* 🚀 3. 파이어베이스 저장 버튼은 항상 노출합니다. (예약 버튼의 디자인을 빌려왔습니다) */}
+                      <button 
+                        onClick={handleSavePlan}
+                        disabled={isSaving}
                         className="block w-full px-8 py-4 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-md transition-transform transform hover:scale-105 text-center"
                       >
-                        Check Live Price & Book
-                      </a>
-                      <p className="text-[10px] text-gray-400 text-center mt-2">
-                        *We may earn a commission from our affiliate partners.
-                      </p>
+                        {isSaving ? "Saving to Vault..." : "💾 Save This Plan"}
+                      </button>
+                      <button 
+                        onClick={handleSharePlan}
+                        disabled={isSharing}
+                        className="block w-full px-8 py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-md transition-transform transform hover:scale-105 text-center flex items-center justify-center gap-2"
+                      >
+                        <i className="fas fa-share-alt"></i>
+                        {isSharing ? "Link Generating..." : "🔗 Share This Plan"}
+                      </button>
                     </div>
-
                   </div>
                 </div>
               )}
-              {/* 👆👆👆 여기까지 입니다! 👆👆👆 */}
+            
 
             </div>
           )}
@@ -1013,6 +1372,8 @@ type: 'text'
             <span className="text-sm text-blue-500">(Matching restaurants and attractions)</span>
           </p>
         </div>
+      )}
+       </>
       )}
     </APIProvider>
   ); // return 끝
