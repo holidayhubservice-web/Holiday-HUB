@@ -13,6 +13,10 @@ import { useAuth } from './hook/useAuth';
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import SplitHomepage from './components/SplitHomepage';
+import BookingBridgeModal from './components/BookingBridgeModal';
+import TourWidget from './components/TourWidget';
+import FlightWidget from './components/FlightWidget';
+
 // 메시지 타입 정의
 
 interface Message {
@@ -33,7 +37,7 @@ declare var google: any; // 전역 google 객체 선언
 
 function App() {
   // --- 1. 상태 관리 및 참조(Ref) 선언 ---
-  const [viewMode, setViewMode] = useState<'intro' | 'main' | 'guess'>('intro');
+  const [viewMode, setViewMode] = useState<'intro' | 'main' | 'guess' | 'build'>('intro');
   const [messages, setMessages] = useState<Message[]>([]);
   const routeCache = useRef<Record<string, any>>({}); // [아키텍처] 루트 캐싱 레이어
   const directionsServiceRef = useRef<any>(null);
@@ -110,6 +114,7 @@ function App() {
   const [myPageMode, setMyPageMode] = useState<'profile' | 'list'>('profile');
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const duration = (() => {
     if (!dates.start || !dates.end) return 3;
     const start = new Date(dates.start);
@@ -697,15 +702,37 @@ type: 'text'
       {viewMode === 'intro' ? (
         <SplitHomepage 
           onSelectBuild={() => {
-            // 오른쪽: 기존 대화형 목적지 검색으로 바로 이동!
-            setViewMode('main');
+            // 🚀 [수정] 오른쪽 경로를 누르면 대화창을 건너뛰고 'build' 대시보드로 바로 보냅니다!
+            setViewMode('build');
           }}
           onSelectGuess={() => {
-            // 왼쪽: 추후 만들 4단계 AI 영감 퀴즈 모드로 이동!
-            setViewMode('main'); // 임시로 main으로 보냄 (이후 업데이트)
-            // setCurrentStep('quiz-start'); // 나중에 이 주석을 풀고 연결합니다.
+            // 🚀 [수정] 왼쪽 경로를 누르면 기존의 대화형 AI 플래너('main')로 진입합니다!
+            setViewMode('main'); 
           }}
         />
+      ) : viewMode === 'build' ? (
+        <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6 md:p-12 animate-fade-in text-gray-800 w-full overflow-y-auto">
+          <h2 className="text-2xl md:text-3xl font-black text-gray-800 mb-8 text-center">
+            Ready to book your next trip? ✈️
+          </h2>
+          
+          <div className="w-full max-w-4xl space-y-8">
+            
+            {/* 🚀 1. 비행기표 위젯 (껍데기 없이 깔끔하게 컴포넌트만 호출!) */}
+            <FlightWidget />
+
+            {/* 🚀 2. 투어/액티비티 위젯 */}
+            <TourWidget />
+
+          </div>
+          
+          <button 
+            onClick={() => setViewMode('intro')}
+            className="mt-8 text-gray-400 underline text-xs font-bold hover:text-gray-600 transition-colors"
+          >
+            ← Back to start
+          </button>
+        </div>
       ) : (
         <>
           {isMyPageOpen && user && (
@@ -1231,7 +1258,7 @@ type: 'text'
                     <div className="w-full md:w-auto flex flex-col items-center gap-3">
                       
                       {/* 🛑 2. 예약 버튼에만 투명 망토(false &&)를 씌워서 숨겨둡니다. (나중에 이것만 지우면 부활!) */}
-                      {false && (
+                      {(
                         <a 
                           href={selectedHotel?.affiliate_link || "#"} 
                           target="_blank" 
