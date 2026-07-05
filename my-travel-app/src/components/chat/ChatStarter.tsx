@@ -15,7 +15,7 @@ export const ChatStarter: React.FC<ChatStarterProps> = ({ onStart }) => {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-4">
+<div className="w-full h-full bg-white md:rounded-3xl overflow-hidden flex flex-col border border-gray-100 shadow-sm">
       <form onSubmit={handleSubmit} className="relative group">
         {/* 입력창 배경에 은은한 글로우 효과 (Spotlight 대용) */}
         <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-500"></div>

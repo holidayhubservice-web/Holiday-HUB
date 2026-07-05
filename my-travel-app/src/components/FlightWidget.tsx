@@ -1,12 +1,12 @@
-// src/components/FlightWidget.tsx
+import React from 'react';
 
 export default function FlightWidget() {
-  // 🚀 트래블페이아웃 스크립트를 독립된 HTML 문서로 포장합니다.
   const scriptHtml = `
     <!DOCTYPE html>
     <html>
       <head>
         <meta charset="utf-8">
+        <link rel="preconnect" href="https://tpwidg.com" />
         <style>body { margin: 0; padding: 0; background: transparent; }</style>
       </head>
       <body>
@@ -16,11 +16,10 @@ export default function FlightWidget() {
   `;
 
   return (
-    <div className="w-full bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
+    <div className="w-full my-6 p-6 bg-white rounded-2xl shadow-xl border border-gray-100">
       <h3 className="font-bold text-lg mb-4 text-blue-600 flex items-center gap-2">
         ✈️ Book your flight
       </h3>
-      {/* 🚀 독립된 방(iframe) 안에서 위젯을 실행시킵니다 */}
       <div className="w-full h-[700px] rounded-xl overflow-hidden bg-white">
         <iframe
           title="Flight Search"

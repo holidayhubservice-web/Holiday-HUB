@@ -14,9 +14,16 @@ import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'fire
 import { db } from './firebaseConfig';
 import SplitHomepage from './components/SplitHomepage';
 import BookingBridgeModal from './components/BookingBridgeModal';
-import TourWidget from './components/TourWidget';
+import KlookWidget from './components/KlookWidget';
 import FlightWidget from './components/FlightWidget';
-
+import CarRentalWidget from './components/CarRentalWidget';
+import About from './pages/About';
+import Contact from './pages/Contact';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
+import AffiliateDisclosure from './pages/AffiliateDisclosure';
+import ConsentModal from './components/ConsentModal';
+import TravelChecklist from './components/TravelChecklist';
 // 메시지 타입 정의
 
 interface Message {
@@ -37,7 +44,11 @@ declare var google: any; // 전역 google 객체 선언
 
 function App() {
   // --- 1. 상태 관리 및 참조(Ref) 선언 ---
-  const [viewMode, setViewMode] = useState<'intro' | 'main' | 'guess' | 'build'>('intro');
+  const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'intro' | 'main' | 'guess' | 'build' | 'terms' | 'privacy' | 'about' | 'contact' | 'disclosure'>('intro');
+  const [activeWidget, setActiveWidget] = useState<'' | 'flight' | 'tour' | 'car' | 'checklist'>('flight');
+  const [buildTab, setBuildTab] = useState<'' | 'flight' | 'checklist'>('checklist');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const routeCache = useRef<Record<string, any>>({}); // [아키텍처] 루트 캐싱 레이어
   const directionsServiceRef = useRef<any>(null);
@@ -115,6 +126,7 @@ function App() {
   const [savedPlans, setSavedPlans] = useState<any[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [isChecklistModalOpen, setIsChecklistModalOpen] = useState(false);
   const duration = (() => {
     if (!dates.start || !dates.end) return 3;
     const start = new Date(dates.start);
@@ -695,35 +707,259 @@ type: 'text'
 
 };
 
+// 🚀 [신규 추가] 5대 신뢰 인프라 페이지를 깔끔하게 라우팅해주는 스위치 함수
+  const renderInfoPages = () => {
+    switch (viewMode) {
+      case 'about': return <About setViewMode={setViewMode} />;
+      case 'contact': return <Contact setViewMode={setViewMode} />;
+      case 'privacy': return <PrivacyPolicy setViewMode={setViewMode} />;
+      case 'terms': return <TermsOfService setViewMode={setViewMode} />;
+      case 'disclosure': return <AffiliateDisclosure setViewMode={setViewMode} />;
+      default: return null;
+    }
+  };
+
+
+
+  // setBuildTab is provided by useState above; no duplicate implementation needed.
+
   // --- 5. UI 렌더링 ---
   return (
    <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
 
-      {viewMode === 'intro' ? (
-        <SplitHomepage 
-          onSelectBuild={() => {
-            // 🚀 [수정] 오른쪽 경로를 누르면 대화창을 건너뛰고 'build' 대시보드로 바로 보냅니다!
-            setViewMode('build');
-          }}
-          onSelectGuess={() => {
-            // 🚀 [수정] 왼쪽 경로를 누르면 기존의 대화형 AI 플래너('main')로 진입합니다!
-            setViewMode('main'); 
-          }}
-        />
-      ) : viewMode === 'build' ? (
+
+{/* viewMode가 'intro'가 아닐 때만 햄버거 버튼과 사이드바를 렌더링합니다 */}
+    {viewMode !== 'intro' && (
+  <>
+    <button 
+      onClick={() => setIsSidebarOpen(true)}
+      className="fixed top-3 left-4 z-[9999] px-3.5 py-2.5 bg-teal-600 rounded-xl shadow-lg hover:bg-teal-700 transition-all flex items-center gap-2 text-white group hover:scale-105"
+    >
+      {/* ☰ 메뉴 아이콘 */}
+      <i className="fas fa-bars text-lg"></i>
+      
+      {/* 🚀 유저에게 더 많은 메뉴가 있음을 알려주는 시각적 마크 */}
+      <span className="text-[11px] font-black tracking-wider border-l border-teal-500/60 pl-2 flex items-center gap-1">
+        MORE 
+        <i className="fas fa-chevron-right text-[9px] opacity-70 group-hover:translate-x-0.5 transition-transform"></i>
+      </span>
+    </button>
+
+        {/* 사이드바 배경 (어두운 반투명 막) */}
+        {isSidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-[10000] transition-opacity"
+            onClick={() => setIsSidebarOpen(false)} // 배경 클릭 시 닫힘
+          >
+            {/* 사이드바 본체 (왼쪽에서 슬라이드) */}
+            <div 
+              className="absolute top-0 left-0 h-full w-64 bg-white shadow-2xl flex flex-col animate-slide-right"
+              onClick={(e) => e.stopPropagation()} // 본체 클릭 시 안 닫히게 방어
+            >
+              <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-teal-50/30">
+                <span className="font-black text-lg text-teal-800">Holiday Hub</span>
+                <button onClick={() => setIsSidebarOpen(false)} className="text-gray-400 hover:text-gray-700">
+                  <i className="fas fa-times text-lg"></i>
+                </button>
+              </div>
+
+              {/* 메뉴 리스트 */}
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+                <p className="text-xs font-bold text-gray-400 mb-2 mt-2">Menu</p>
+                
+                <button 
+                  onClick={() => { 
+                    setViewMode('build'); 
+                    setBuildTab('flight');           // 💡 탭 상태 초기화
+                    setActiveWidget('flight');       // 💡 위젯 상태 초기화
+                    setIsSidebarOpen(false); 
+                    setIsChecklistModalOpen(false);  // 💡 혹시 열린 팝업 강제 닫기
+                    window.scrollTo({ top: 0, behavior: 'smooth' }); // 🚀 스크롤 맨 위로!
+                  }} 
+                  className="text-left px-4 py-3 rounded-xl font-medium text-gray-700 hover:bg-teal-50 hover:text-teal-700 transition-colors"
+                >
+                  🛠️ Build My Travel
+                </button>
+                
+                <button 
+                  onClick={() => { 
+                    setViewMode('main'); 
+                    setBuildTab(''); 
+                    setActiveWidget('flight');
+                    setIsSidebarOpen(false); 
+                    setIsChecklistModalOpen(false);
+                    window.scrollTo({ top: 0, behavior: 'smooth' }); // 🚀 스크롤 맨 위로!
+                  }} 
+                  className="text-left px-4 py-3 rounded-xl font-medium text-gray-700 hover:bg-teal-50 hover:text-teal-700 transition-colors"
+                >
+                  💬 AI Chat Planner
+                </button>
+                
+                <button 
+                  onClick={() => { 
+                    setIsChecklistModalOpen(true); 
+                    setIsSidebarOpen(false); 
+                  }} 
+                  className="text-left px-4 py-3 rounded-xl font-medium text-gray-700 hover:bg-yellow-50 hover:text-yellow-700 transition-colors"
+                >
+                  ✅ Travel Checklist
+                </button>
+
+
+                <p className="text-xs font-bold text-gray-400 mb-2 mt-4">Help & Info</p>
+                
+                <button 
+                  onClick={() => { 
+                    setViewMode('about'); 
+                    setIsSidebarOpen(false); 
+                    setIsChecklistModalOpen(false);
+                    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                  }} 
+                  className="text-left px-4 py-3 rounded-xl font-medium text-gray-700 hover:bg-teal-50 hover:text-teal-700 transition-colors"
+                >
+                  💡 About Us
+                </button>
+                
+                <button 
+                  onClick={() => { 
+                    setViewMode('terms'); 
+                    setIsSidebarOpen(false); 
+                    setIsChecklistModalOpen(false);
+                    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                  }} 
+                  className="text-left px-4 py-3 rounded-xl font-medium text-gray-700 hover:bg-teal-50 hover:text-teal-700 transition-colors"
+                >
+                  📄 Terms of Service
+                </button>
+                
+                <button 
+                  onClick={() => { 
+                    setViewMode('privacy'); 
+                    setIsSidebarOpen(false); 
+                    setIsChecklistModalOpen(false);
+                    window.scrollTo({ top: 0, behavior: 'smooth' }); 
+                  }} 
+                  className="text-left px-4 py-3 rounded-xl font-medium text-gray-700 hover:bg-teal-50 hover:text-teal-700 transition-colors"
+                >
+                  🔒 Privacy Policy
+                </button>
+              </div>
+
+              {/* 하단 유저/로그인 영역 */}
+              <div className="p-4 border-t border-gray-100 bg-gray-50">
+                {user ? (
+                  <button onClick={() => { setIsMyPageOpen(true); setIsSidebarOpen(false); }} className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-gray-200 transition-colors">
+                    <img src={user.photoURL || ''} alt="Profile" className="w-10 h-10 rounded-full border border-gray-300" />
+                    <div className="text-left flex-1 overflow-hidden">
+                      <p className="text-sm font-bold text-gray-800 truncate">{user.displayName}</p>
+                      <p className="text-xs text-teal-600 font-bold">My Trips & Setting</p>
+                    </div>
+                  </button>
+                ) : (
+                  <button onClick={() => setIsConsentModalOpen(true)} className="text-sm font-bold text-teal-600 hover:text-teal-800 transition-colors flex items-center gap-1.5 bg-teal-50 px-3 py-1.5 rounded-full">
+  <i className="fab fa-google"></i> Login
+</button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    )}
+      {['about', 'contact', 'privacy', 'terms', 'disclosure'].includes(viewMode) ? (
+      renderInfoPages()
+    ) : viewMode === 'intro' ? (
+      <SplitHomepage 
+        onSelectBuild={() => setViewMode('build')}
+        onSelectGuess={() => setViewMode('main')}
+      />
+    ) : viewMode === 'build' ? (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6 md:p-12 animate-fade-in text-gray-800 w-full overflow-y-auto">
-          <h2 className="text-2xl md:text-3xl font-black text-gray-800 mb-8 text-center">
-            Ready to book your next trip? ✈️
-          </h2>
+          {/* 🚨 모든 주석은 반드시 제일 바깥 껍데기(div) 안쪽에 있어야 합니다! */}
           
-          <div className="w-full max-w-4xl space-y-8">
-            
-            {/* 🚀 1. 비행기표 위젯 (껍데기 없이 깔끔하게 컴포넌트만 호출!) */}
-            <FlightWidget />
+          {/* 🚀 텍스트 대신 들어간 세련된 로고 컨테이너 */}
+          <div className="mb-8 flex justify-center w-full mt-4">
+            <img 
+              src="/logo.png" 
+              alt="Holiday Hub" 
+              className="h-16 md:h-20 w-auto object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+            />
+          </div>
+          
+          {/* 🚀 1. 탭 네비게이션 버튼 공간 */}
+         <div className="flex flex-wrap justify-center gap-3 mb-8 w-full max-w-4xl">
+  
+  {/* 1. Flights (청록색 활성화) */}
+  <button
+    onClick={() => {
+      setActiveWidget('flight');
+      setBuildTab(''); // 💡 팁: 두 개가 동시에 켜지는 걸 막기 위해 체크리스트 상태를 비워줍니다.
+    }}
+    className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
+      activeWidget === 'flight' 
+        ? 'bg-teal-600 text-white shadow-lg scale-105 ring-2 ring-teal-200' 
+        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
+    }`}
+  >
+    ✈️ Flights
+  </button>
 
-            {/* 🚀 2. 투어/액티비티 위젯 */}
-            <TourWidget />
+  {/* 2. Tours & Activities (노란색 활성화) */}
+  <button
+    onClick={() => {
+      setActiveWidget('tour');
+      setBuildTab('');
+    }}
+    className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
+      activeWidget === 'tour' 
+        ? 'bg-yellow-400 text-gray-900 shadow-lg scale-105 ring-2 ring-yellow-200' 
+        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
+    }`}
+  >
+    🎟️ Tours & Activities
+  </button>
 
+  {/* 3. Car Rental (청록색 활성화) */}
+  <button
+    onClick={() => {
+      setActiveWidget('car');
+      setBuildTab('');
+    }}
+    className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
+      activeWidget === 'car' 
+        ? 'bg-teal-600 text-white shadow-lg scale-105 ring-2 ring-teal-200' 
+        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
+    }`}
+  >
+    🚗 Car Rental
+  </button>
+  
+  {/* 4. Checklist (노란색 활성화) */}
+  <button 
+    onClick={() => { 
+      setBuildTab('checklist');
+      setActiveWidget(''); // 💡 팁: 체크리스트를 켰을 때 다른 위젯이 같이 켜져있는 걸 방지합니다.
+    }}
+    className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
+      buildTab === 'checklist' 
+        ? 'bg-yellow-400 text-gray-900 shadow-lg scale-105 ring-2 ring-yellow-200' 
+        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
+    }`}
+  >
+    ✅ Checklist
+  </button>
+
+</div>
+          {/* 🚀 2. 선택된 위젯만 단독으로 보여주는 공간 */}
+          <div className="w-full max-w-4xl transition-all duration-500 ease-in-out">
+            {activeWidget === 'flight' && <FlightWidget />}
+            {activeWidget === 'tour' && <KlookWidget />} 
+            {activeWidget === 'car' && <CarRentalWidget />}
+            {buildTab === 'checklist' && (
+            <div className="w-full min-h-[60vh] flex flex-col animate-fade-in mt-4">
+              <TravelChecklist />
+            </div>
+          )}
           </div>
           
           <button 
@@ -814,37 +1050,38 @@ type: 'text'
       )}
   <div className="h-screen flex flex-col bg-white overflow-hidden">
     {/* 1. 고정 헤더 */}
-    <header className="bg-white px-4 py-3 border-b-2 border-teal-100 flex items-center justify-between z-50 relative">
+   <header className="bg-white px-4 py-3 border-b-2 border-teal-100 flex items-center justify-between z-50 relative min-h-[64px]">
   
-  {/* 좌측 여백 (레이아웃 균형용) */}
-  <div className="w-16"></div> 
-  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
+  {/* 좌측: 햄버거 버튼이 차지할 공간을 비워둡니다 (레이아웃 균형용) */}
+  <div className="w-12 md:w-16 flex-shrink-0"></div> 
+
+  {/* 중앙: 로고 (flex-1을 주어 양옆 공간을 제외한 중앙에 안전하게 위치함) */}
+  <div className="flex-1 flex items-center justify-center">
     <img 
       src="/logo.png"
       alt="Holiday Hub Logo" 
-      /* 모바일에서는 h-8, PC에서는 h-10으로 설정하여 상하 여백(숨구멍)을 줍니다 */
-      className="h-10 md:h-12 w-auto object-contain cursor-pointer hover:opacity-80 transition-opacity" 
+      className="h-8 md:h-10 w-auto object-contain cursor-pointer hover:opacity-80 transition-opacity" 
       onClick={() => window.location.reload()}
     />
   </div>
 
-  {/* 우측 Reset 버튼 (민트 컬러 적용) */}
-  <div className="flex items-center gap-4 z-10">
-          {user ? (
-            // 로그인 성공 시: 유저 프로필 사진이 뜹니다. 누르면 마이페이지 오픈!
-            <button onClick={() => setIsMyPageOpen(true)} className="hover:opacity-80 transition-opacity">
-              <img src={user.photoURL || ''} alt="Profile" className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-teal-200 shadow-sm" />
-            </button>
-          ) : (
-            // 로그아웃 상태: 구글 로그인 버튼이 뜹니다.
-            <button onClick={loginWithGoogle} className="text-sm font-bold text-teal-600 hover:text-teal-800 transition-colors flex items-center gap-1.5">
-              <i className="fab fa-google"></i> Login
-            </button>
-          )}
-  
-  <button onClick={() => window.location.reload()} className="text-sm font-bold text-teal-600 hover:text-teal-800 z-10 transition-colors">
-    Reset
-  </button>
+  {/* 우측: Reset 버튼 및 로그인/프로필 (내용물이 길어져도 로고를 밀어내지 않음) */}
+  <div className="flex items-center justify-end gap-3 z-10 w-auto flex-shrink-0">
+    <button onClick={() => window.location.reload()} className="text-sm font-bold text-teal-600 hover:text-teal-800 transition-colors">
+      Reset
+    </button>
+    
+    {user ? (
+      // 로그인 성공 시: 유저 프로필 사진
+      <button onClick={() => setIsMyPageOpen(true)} className="hover:opacity-80 transition-opacity">
+        <img src={user.photoURL || ''} alt="Profile" className="w-8 h-8 md:w-9 md:h-9 rounded-full border-2 border-teal-200 shadow-sm" />
+      </button>
+    ) : (
+      // 로그아웃 상태: 구글 로그인 버튼 (약관 카피는 사이드바로 이동했으므로 버튼만 깔끔하게 남김)
+      <button onClick={() => setIsConsentModalOpen(true)} className="text-sm font-bold text-teal-600 hover:text-teal-800 transition-colors flex items-center gap-1.5 bg-teal-50 px-3 py-1.5 rounded-full">
+  <i className="fab fa-google"></i> Login
+</button>
+    )}
   </div>
 </header>
 
@@ -1258,7 +1495,7 @@ type: 'text'
                     <div className="w-full md:w-auto flex flex-col items-center gap-3">
                       
                       {/* 🛑 2. 예약 버튼에만 투명 망토(false &&)를 씌워서 숨겨둡니다. (나중에 이것만 지우면 부활!) */}
-                      {(
+                      {false &&(
                         <a 
                           href={selectedHotel?.affiliate_link || "#"} 
                           target="_blank" 
@@ -1377,6 +1614,20 @@ type: 'text'
       Please select options from the chat above ☝️
     </div>
   )}
+  <ConsentModal 
+  isOpen={isConsentModalOpen}
+  onClose={() => setIsConsentModalOpen(false)}
+  onConfirmLogin={loginWithGoogle} // 🔥 모든 체크를 마쳤을 때만 진짜 구글 로그인이 실행됩니다!
+  setViewMode={setViewMode}
+/>
+{isChecklistModalOpen && (
+  <div className="fixed inset-0 z-[10000] bg-white animate-slide-up flex flex-col overflow-hidden">
+    {/* 모바일 최적화를 위해 SafeArea(상단 여백)를 고려한 뷰 컨테이너 */}
+    <div className="w-full h-full max-w-3xl mx-auto flex flex-col bg-white shadow-2xl">
+      <TravelChecklist onClose={() => setIsChecklistModalOpen(false)} />
+    </div>
+  </div>
+)}
 </footer>
       </div> {/* min-h-screen 닫기 */}
       {isLoading && (
