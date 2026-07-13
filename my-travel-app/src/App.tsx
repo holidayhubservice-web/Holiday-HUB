@@ -47,7 +47,6 @@ function App() {
   const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'intro' | 'main' | 'guess' | 'build' | 'terms' | 'privacy' | 'about' | 'contact' | 'disclosure'>('intro');
   const [activeWidget, setActiveWidget] = useState<'' | 'flight' | 'tour' | 'car' | 'checklist'>('flight');
-  const [buildTab, setBuildTab] = useState<'' | 'flight' | 'checklist'>('checklist');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const routeCache = useRef<Record<string, any>>({}); // [아키텍처] 루트 캐싱 레이어
@@ -770,7 +769,6 @@ type: 'text'
                 <button 
                   onClick={() => { 
                     setViewMode('build'); 
-                    setBuildTab('flight');           // 💡 탭 상태 초기화
                     setActiveWidget('flight');       // 💡 위젯 상태 초기화
                     setIsSidebarOpen(false); 
                     setIsChecklistModalOpen(false);  // 💡 혹시 열린 팝업 강제 닫기
@@ -783,8 +781,7 @@ type: 'text'
                 
                 <button 
                   onClick={() => { 
-                    setViewMode('main'); 
-                    setBuildTab(''); 
+                    setViewMode('main');
                     setActiveWidget('flight');
                     setIsSidebarOpen(false); 
                     setIsChecklistModalOpen(false);
@@ -889,77 +886,65 @@ type: 'text'
           {/* 🚀 1. 탭 네비게이션 버튼 공간 */}
          <div className="flex flex-wrap justify-center gap-3 mb-8 w-full max-w-4xl">
   
-  {/* 1. Flights (청록색 활성화) */}
-  <button
-    onClick={() => {
-      setActiveWidget('flight');
-      setBuildTab(''); // 💡 팁: 두 개가 동시에 켜지는 걸 막기 위해 체크리스트 상태를 비워줍니다.
-    }}
-    className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
-      activeWidget === 'flight' 
-        ? 'bg-teal-600 text-white shadow-lg scale-105 ring-2 ring-teal-200' 
-        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
-    }`}
-  >
-    ✈️ Flights
-  </button>
+            <button
+              onClick={() => setActiveWidget('flight')}
+              className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
+                activeWidget === 'flight' 
+                  ? 'bg-teal-600 text-white shadow-lg scale-105 ring-2 ring-teal-200' 
+                  : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              ✈️ Flights
+            </button>
 
-  {/* 2. Tours & Activities (노란색 활성화) */}
-  <button
-    onClick={() => {
-      setActiveWidget('tour');
-      setBuildTab('');
-    }}
-    className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
-      activeWidget === 'tour' 
-        ? 'bg-yellow-400 text-gray-900 shadow-lg scale-105 ring-2 ring-yellow-200' 
-        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
-    }`}
-  >
-    🎟️ Tours & Activities
-  </button>
+            <button
+              onClick={() => setActiveWidget('tour')}
+              className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
+                activeWidget === 'tour' 
+                  ? 'bg-yellow-400 text-gray-900 shadow-lg scale-105 ring-2 ring-yellow-200' 
+                  : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              🎟️ Tours & Activities
+            </button>
 
-  {/* 3. Car Rental (청록색 활성화) */}
-  <button
-    onClick={() => {
-      setActiveWidget('car');
-      setBuildTab('');
-    }}
-    className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
-      activeWidget === 'car' 
-        ? 'bg-teal-600 text-white shadow-lg scale-105 ring-2 ring-teal-200' 
-        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
-    }`}
-  >
-    🚗 Car Rental
-  </button>
-  
-  {/* 4. Checklist (노란색 활성화) */}
-  <button 
-    onClick={() => { 
-      setBuildTab('checklist');
-      setActiveWidget(''); // 💡 팁: 체크리스트를 켰을 때 다른 위젯이 같이 켜져있는 걸 방지합니다.
-    }}
-    className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
-      buildTab === 'checklist' 
-        ? 'bg-yellow-400 text-gray-900 shadow-lg scale-105 ring-2 ring-yellow-200' 
-        : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
-    }`}
-  >
-    ✅ Checklist
-  </button>
-
-</div>
+            <button
+              onClick={() => setActiveWidget('car')}
+              className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
+                activeWidget === 'car' 
+                  ? 'bg-teal-600 text-white shadow-lg scale-105 ring-2 ring-teal-200' 
+                  : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              🚗 Car Rental
+            </button>
+            
+            {/* 🚀 Checklist도 동일하게 activeWidget으로 통제합니다 */}
+            <button 
+              onClick={() => setActiveWidget('checklist')}
+              className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 ${
+                activeWidget === 'checklist' 
+                  ? 'bg-yellow-400 text-gray-900 shadow-lg scale-105 ring-2 ring-yellow-200' 
+                  : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              ✅ Checklist
+            </button>
+          </div>
           {/* 🚀 2. 선택된 위젯만 단독으로 보여주는 공간 */}
-          <div className="w-full max-w-4xl transition-all duration-500 ease-in-out">
+          <div className="w-full max-w-7xl transition-all duration-500 ease-in-out"> 
+            {/* 💡 팁: Tailwind 기본 최대 넓이는 7xl입니다. 10xl은 작동하지 않을 수 있어 7xl로 수정했습니다. */}
+            
             {activeWidget === 'flight' && <FlightWidget />}
             {activeWidget === 'tour' && <KlookWidget />} 
             {activeWidget === 'car' && <CarRentalWidget />}
-            {buildTab === 'checklist' && (
+            
+            {/* 🚀 buildTab을 activeWidget으로 완벽 통일! */}
+            {activeWidget === 'checklist' && (
             <div className="w-full min-h-[60vh] flex flex-col animate-fade-in mt-4">
               <TravelChecklist />
             </div>
-          )}
+            )}
           </div>
           
           <button 
