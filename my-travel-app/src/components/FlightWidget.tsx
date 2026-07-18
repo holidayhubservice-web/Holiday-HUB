@@ -28,7 +28,7 @@ export default function FlightWidget() {
           title="Flight Search"
           srcDoc={scriptHtml}
           className="w-full h-full border-none"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+          sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
         />
       </div>
     </div>
