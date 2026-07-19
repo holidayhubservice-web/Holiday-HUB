@@ -30,7 +30,7 @@ from logic.hotel_engine import find_hotels_logic
 # ==========================================
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-redis_uri = "redis://localhost:6379/0" 
+redis_uri = os.environ.get("REDIS_URL", "memory://")
 
 limiter = Limiter(
     get_remote_address, # 유저의 IP를 기준으로 카운트합니다.
@@ -779,41 +779,54 @@ def create_plan_route():
 
 @app.route('/autocomplete', methods=['GET'])
 def autocomplete_proxy():
-    # 1. 변수 정의를 가장 먼저!
-    q = request.args.get('query')
-    search_type = request.args.get('type', 'place') # 기본값 'place' 설정
-    lat = request.args.get('lat')
-    lng = request.args.get('lng')
-    token = request.args.get('session_token')
+    # 🚀 1. 함수 시작과 동시에 try 블록으로 전체 로직을 감싸줍니다.
+    try:
+        q = request.args.get('query')
+        search_type = request.args.get('type', 'place')
+        lat = request.args.get('lat')
+        lng = request.args.get('lng')
+        token = request.args.get('session_token')
 
-    # 2. 그 다음에 디버그 출력 (이제 에러 안 남)
-    print(f"--- DEBUG START ---")
-    print(f"Query: {q}, Type: {search_type}")
+        print(f"--- DEBUG START ---")
+        print(f"Query: {q}, Type: {search_type}")
 
-    if not q: return jsonify({"status": "error"}), 400
+        if not q: return jsonify({"status": "error"}), 400
 
-    params = {
-        "input": q,
-        "key": config.GOOGLE_API_KEY,
-        "language": "en",
-    }
+        params = {
+            "input": q,
+            # 💡 의심 포인트 1: 이 키값을 렌더에서 잘 가져오고 있는지 확인해야 합니다.
+            "key": config.GOOGLE_API_KEY, 
+            "language": "en",
+        }
 
-    # 3. 도시/장소 분기 로직
-    if search_type == 'city':
-        params['types'] = '(cities)'
-    else:
-        params['types'] = 'establishment'
-        if lat and lng:
-            params['location'] = f"{lat},{lng}"
-            params['radius'] = "50000"
-            params['strictbounds'] = "true"
+        if search_type == 'city':
+            params['types'] = '(cities)'
+        else:
+            params['types'] = 'establishment'
+            if lat and lng:
+                params['location'] = f"{lat},{lng}"
+                params['radius'] = "50000"
+                params['strictbounds'] = "true"
 
-    if token: params['sessiontoken'] = token
+        if token: params['sessiontoken'] = token
 
-    print(f"Final Params: {params}")
-    res = _make_api_request(AUTOCOMPLETE_API_URL, params=params)
-    print(f"--- DEBUG END ---")
-    return jsonify(res)
+        print(f"Final Params: {params}")
+        res = _make_api_request(AUTOCOMPLETE_API_URL, params=params)
+        print(f"--- DEBUG END ---")
+        
+        # 💡 의심 포인트 2: res가 이미 dict인지, 응답 객체인지 확인하고 안전하게 반환합니다.
+        if hasattr(res, 'json') and callable(res.json):
+            return jsonify(res.json())
+        return jsonify(res)
+
+    # 🚀 2. 기존 코드 마지막에 아래의 예외 처리(catch) 로직을 새로 삽입합니다.
+    except Exception as e:
+        # 에러가 나도 서버가 죽지 않고, 프론트엔드로 정확한 에러 원인을 JSON으로 보냅니다.
+        import traceback
+        error_msg = str(e)
+        print(f"❌ Autocomplete Backend Error: {error_msg}")
+        print(traceback.format_exc()) # 렌더 로그에 상세 에러 추적 내역을 남깁니다.
+        return jsonify({"status": "error", "message": error_msg}), 500
 @app.route('/place-details') # 👈 맨 앞줄에 딱 붙이세요!
 def get_place_details():     # 👈 맨 앞줄에 딱 붙이세요!
     place_id = request.args.get('place_id') # 👈 여기서부터 한 칸(Tab) 들여쓰기
