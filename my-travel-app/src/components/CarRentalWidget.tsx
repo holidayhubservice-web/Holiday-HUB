@@ -16,19 +16,15 @@ export default function CarRentalWidget() {
   `;
 
   return (
-    <div className="w-full my-6 p-6 bg-white rounded-2xl shadow-xl border border-gray-100">
-      <h3 className="font-bold text-lg mb-4 text-green-600 flex items-center gap-2">
-        🚗 Rent a Car for your trip
-      </h3>
-      {/* 렌터카 위젯은 보통 검색창 형태라 높이를 300px~400px 정도로 잡는 것이 좋습니다 */}
-      <div className="w-full h-[350px] rounded-xl overflow-hidden bg-white">
-        <iframe
-          title="Car Rental Search"
-          srcDoc={scriptHtml}
-          className="w-full h-full border-none"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-        />
-      </div>
+    // 🎨 UI 개선: 마찬가지로 껍데기를 벗겨내어 메인 화면에 자연스럽게 스며들게 합니다.
+    <div className="w-full my-6">
+      <iframe
+        title="Car Rental Search"
+        srcDoc={scriptHtml}
+        className="w-full min-h-[350px] border-none"
+        // 🛡️ 에러 방지: 기존 코드에 빠져 있던 'allow-forms'를 몰래 추가해 두었습니다!
+        sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+      />
     </div>
   );
 }

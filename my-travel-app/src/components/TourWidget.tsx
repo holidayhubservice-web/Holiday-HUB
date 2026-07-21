@@ -1,33 +1,30 @@
-// src/components/TourWidget.tsx
+import React from 'react';
 
 export default function TourWidget() {
-  // 🚀 예전에 성공했던 Klook(137) 스크립트를 iframe용으로 래핑합니다.
   const scriptHtml = `
     <!DOCTYPE html>
     <html>
       <head>
         <meta charset="utf-8">
+        <link rel="preconnect" href="https://tpwidg.com" />
         <style>body { margin: 0; padding: 0; background: transparent; }</style>
       </head>
       <body>
-        <script async src="https://tpwidg.com/content?currency=USD&trs=524623&shmarker=724242&locale=en&city_id=2&category=4&amount=3&powered_by=true&campaign_id=137&promo_id=4497" charset="utf-8"></script>
+        <script async src="https://tpwidg.com/content?currency=USD&trs=524623&shmarker=724242&language=en&locale=60389&layout=responsive&cards=4&powered_by=true&campaign_id=89&promo_id=3947" charset="utf-8"></script>
       </body>
     </html>
   `;
 
   return (
-    <div className="w-full bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
-      <h3 className="font-bold text-lg mb-4 text-orange-500 flex items-center gap-2">
-        🎟️ Popular Local Activities & Tours
-      </h3>
-      <div className="w-full h-[350px] rounded-xl overflow-hidden bg-white">
-        <iframe
-          title="Tour Search"
-          srcDoc={scriptHtml}
-          className="w-full h-full border-none"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-        />
-      </div>
+    // 🎨 UI 개선: 시각적인 테두리, 흰 배경, 커스텀 제목을 모두 제거하고 투명한 영역만 남깁니다.
+    <div className="w-full my-6">
+      <iframe
+        title="Tour Search"
+        srcDoc={scriptHtml}
+        // 위젯 자체의 높이를 충분히 주어 4개의 카드가 시원하게 보이도록 합니다.
+        className="w-full min-h-[500px] border-none"
+        sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+      />
     </div>
   );
 }

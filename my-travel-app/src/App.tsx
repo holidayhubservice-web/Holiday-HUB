@@ -14,7 +14,7 @@ import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'fire
 import { db } from './firebaseConfig';
 import SplitHomepage from './components/SplitHomepage';
 import BookingBridgeModal from './components/BookingBridgeModal';
-import KlookWidget from './components/KlookWidget';
+import TourWidget from './components/TourWidget';
 import FlightWidget from './components/FlightWidget';
 import CarRentalWidget from './components/CarRentalWidget';
 import About from './pages/About';
@@ -870,8 +870,8 @@ type: 'text'
         onSelectBuild={() => setViewMode('build')}
         onSelectGuess={() => setViewMode('main')}
       />
-    ) : viewMode === 'build' ? (
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6 md:p-12 animate-fade-in text-gray-800 w-full overflow-y-auto">
+) : viewMode === 'build' ? (
+  <div className="min-h-screen bg-[#F4FAFA] flex flex-col items-center p-6 md:p-12 animate-fade-in text-gray-800 w-full overflow-y-auto">
           {/* 🚨 모든 주석은 반드시 제일 바깥 껍데기(div) 안쪽에 있어야 합니다! */}
           
           {/* 🚀 텍스트 대신 들어간 세련된 로고 컨테이너 */}
@@ -936,7 +936,7 @@ type: 'text'
             {/* 💡 팁: Tailwind 기본 최대 넓이는 7xl입니다. 10xl은 작동하지 않을 수 있어 7xl로 수정했습니다. */}
             
             {activeWidget === 'flight' && <FlightWidget />}
-            {activeWidget === 'tour' && <KlookWidget />} 
+            {activeWidget === 'tour' && <TourWidget />}
             {activeWidget === 'car' && <CarRentalWidget />}
             
             {/* 🚀 buildTab을 activeWidget으로 완벽 통일! */}
